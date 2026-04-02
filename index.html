@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cardápio | Smart Store Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/index.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <div class="status-bar" id="status">Conectando ao banco...</div>
+
+    <header class="header">
+      <div class="header-inner">
+        <img class="header-logo" id="brandLogo" alt="Logo do restaurante">
+        <div class="header-info">
+          <h1 class="header-name" id="brandName">Restaurante</h1>
+          <p class="header-hours" id="brandSchedule">Horário não informado</p>
+          <div class="quick-info">
+            <span class="quick-pill">Telefone: <strong id="brandPhone">-</strong></span>
+            <span class="quick-pill">PIX: <strong id="brandPix">-</strong></span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <section class="tools">
+      <input id="searchInput" class="search-box" type="search" placeholder="Buscar por nome ou descrição" aria-label="Buscar item no cardápio">
+      <nav class="cat-nav" id="catNav" aria-label="Categorias"></nav>
+    </section>
+
+    <main class="main" id="menu"></main>
+  </div>
+
+  <div class="modal-backdrop" id="itemModal">
+    <div id="modalBody"></div>
+  </div>
+
+  <div class="cart-backdrop" id="cartBackdrop">
+    <aside class="cart-panel" role="dialog" aria-modal="true" aria-label="Carrinho">
+      <header class="cart-head">
+        <h3>Seu carrinho</h3>
+        <button type="button" id="closeCartBtn" class="ghost-btn">Fechar</button>
+      </header>
+      <div class="cart-list" id="cartList"></div>
+      <footer class="cart-foot">
+        <div class="cart-total-row">
+          <span>Total</span>
+          <strong id="cartTotal">R$ 0,00</strong>
+        </div>
+        <textarea id="cartNote" class="cart-note" placeholder="Observação do pedido (opcional)"></textarea>
+        <button type="button" class="checkout-btn" id="checkoutBtn">Finalizar no WhatsApp</button>
+      </footer>
+    </aside>
+  </div>
+
+  <button type="button" class="cart-fab" id="cartFab" aria-label="Abrir carrinho">
+    <span id="cartFabCount">0 itens</span>
+    <strong id="cartFabTotal">R$ 0,00</strong>
+  </button>
+
+  <script src="assets/js/index.js"></script>
+</body>
+</html>
