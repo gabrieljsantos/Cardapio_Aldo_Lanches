@@ -352,6 +352,10 @@ img {
 
 .modal-scroll {
   flex: 1;
+  overflow-y: hidden;
+}
+
+.modal-scroll.mod-scroll-enabled {
   overflow-y: auto;
 }
 
@@ -370,8 +374,7 @@ img {
 
 .modal-photo {
   width: 100%;
-  aspect-ratio: 1 / 1;
-  height: auto;
+  height: clamp(140px, 26vh, 210px);
   object-fit: cover;
   background: var(--surface-soft);
 }
@@ -911,6 +914,10 @@ body.modal-open .cart-fab {
 
   .modal-content {
     padding: 13px;
+  }
+
+  .modal-photo {
+    height: clamp(110px, 22vh, 160px);
   }
 
   .modal-title {

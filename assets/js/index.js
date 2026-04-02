@@ -775,7 +775,14 @@ function openItemModal(item, options = {}) {
 
   document.getElementById("modalClose")?.addEventListener("click", closeModal);
   document.getElementById("compToggleBtn")?.addEventListener("click", () => {
-    document.getElementById("compBody")?.classList.toggle("show");
+    const compBody = document.getElementById("compBody");
+    const modalScroll = ui.modalBody.querySelector(".modal-scroll");
+    if (!compBody || !modalScroll) {
+      return;
+    }
+
+    const isShowing = compBody.classList.toggle("show");
+    modalScroll.classList.toggle("mod-scroll-enabled", isShowing);
   });
 
   const compInteractive = document.getElementById("compInteractive");
