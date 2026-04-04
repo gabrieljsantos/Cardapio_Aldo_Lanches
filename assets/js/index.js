@@ -460,22 +460,101 @@ function buildCategoryTree(categories) {
   return { roots, children };
 }
 
+function buildInlineCompositionText(itemId) {
+  const typeOrder = { delta: 0, scalable: 1 };
+
+  const rows = state.associations
+    .filter((assoc) => assoc.owner_id === itemId && (assoc.link_type === "delta" || assoc.link_type === "scalable"))
+    .map((assoc) => ({
+      assoc,
+      comp: state.compMap[assoc.composition_id]
+    }))
+    .filter((row) => row.comp && Number(row.comp.stock ?? 0) >= 0)
+    .sort((a, b) => {
+      const ta = typeOrder[a.assoc.link_type] ?? 99;
+      const tb = typeOrder[b.assoc.link_type] ?? 99;
+      if (ta !== tb) {
+        return ta - tb;
+      }
+
+      const pa = sortPriorityValue(a.comp);
+      const pb = sortPriorityValue(b.comp);
+      if (pa !== pb) {
+        return pa - pb;
+      }
+
+      return String(a.comp.name || "").localeCompare(String(b.comp.name || ""), "pt-BR", { sensitivity: "base" });
+    });
+
+  const seen = new Set();
+  const names = [];
+
+  const formatQty = (value) => {
+    const rounded = Math.round(value);
+    return Math.abs(value - rounded) < 0.001 ? String(rounded) : String(value).replace(".", ",");
+  };
+
+  rows.forEach((row) => {
+    const key = row.comp.id;
+    if (seen.has(key)) {
+      return;
+    }
+
+    const baseValue = Number(row.assoc.link_value ?? 0);
+    if (!Number.isFinite(baseValue) || baseValue < 1) {
+      return;
+    }
+
+    seen.add(key);
+    const compName = String(row.comp.name || "").trim();
+    if (!compName) {
+      return;
+    }
+
+    if (baseValue > 1) {
+      names.push(`${formatQty(baseValue)} x ${compName}`);
+      return;
+    }
+
+    names.push(compName);
+  });
+
+  return names.filter(Boolean).join(" | ");
+}
+
+function buildSearchCompositionText(itemId) {
+  const names = state.associations
+    .filter((assoc) => assoc.owner_id === itemId && Number(assoc.link_value ?? 0) > 0)
+    .map((assoc) => state.compMap[assoc.composition_id])
+    .filter((comp) => comp && Number(comp.stock ?? 0) >= 0)
+    .map((comp) => String(comp.name || "").trim())
+    .filter(Boolean);
+
+  return [...new Set(names)].join(" ");
+}
+
 function createItemCard(item, mode) {
   const isInert = Number(item.__effectiveStock ?? item.stock ?? 0) === 0;
   const photos = getItemPhotos(item);
   const photo = safeImageUrl(photos[0] || "");
   const description = String(item.description || "").trim();
+  const compositionInline = buildInlineCompositionText(item.id);
+  const compositionForSearch = buildSearchCompositionText(item.id);
   const safeName = escapeHtml(item.name);
   const safeDescription = escapeHtml(description);
+  const safeCompositionInline = escapeHtml(compositionInline);
+  const descWithComp = description && compositionInline
+    ? `${safeDescription} <span class="item-comp-inline">${safeCompositionInline}</span>`
+    : (description ? safeDescription : (compositionInline ? `<span class="item-comp-inline">${safeCompositionInline}</span>` : ""));
   const div = document.createElement("article");
   div.className = `item-card${isInert ? " inert" : ""}`;
-  div.dataset.search = normalize(`${item.name} ${description}`);
+  div.dataset.search = normalize(`${item.name} ${description} ${compositionInline} ${compositionForSearch}`);
 
   div.innerHTML = `
     <img class="item-photo" src="${photo}" alt="${safeName}" loading="lazy" onerror="this.onerror=null;this.src='${DEFAULT_ITEM_IMAGE}'">
     <div>
       <h4 class="item-name">${safeName}</h4>
-      ${description ? `<p class="item-desc">${safeDescription}</p>` : ""}
+      ${descWithComp ? `<p class="item-desc">${descWithComp}</p>` : ""}
       <div class="item-bottom">
         <span class="item-price">${currency(item.price)}</span>
         ${isInert ? '<span class="item-stock">Indisponível</span>' : ""}
