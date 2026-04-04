@@ -147,6 +147,33 @@ function closeCart() {
   ui.cartBackdrop.classList.remove("show");
 }
 
+function updateViewportMetrics() {
+  const vv = window.visualViewport;
+  let height = window.innerHeight;
+  let bottomInset = 0;
+
+  if (vv) {
+    height = vv.height;
+    const layoutHeight = window.innerHeight;
+    bottomInset = Math.max(0, layoutHeight - (vv.height + vv.offsetTop));
+  }
+
+  document.documentElement.style.setProperty("--viewport-height", `${(height / 100).toFixed(4)}px`);
+  document.documentElement.style.setProperty("--viewport-bottom-inset", `${Math.round(bottomInset)}px`);
+}
+
+function bindViewportMetrics() {
+  updateViewportMetrics();
+
+  window.addEventListener("resize", updateViewportMetrics, { passive: true });
+  window.addEventListener("orientationchange", updateViewportMetrics, { passive: true });
+
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", updateViewportMetrics, { passive: true });
+    window.visualViewport.addEventListener("scroll", updateViewportMetrics, { passive: true });
+  }
+}
+
 function lockPageScroll() {
   state.lockedScrollY = window.scrollY || window.pageYOffset || 0;
   document.body.style.top = `-${state.lockedScrollY}px`;
@@ -1292,6 +1319,7 @@ async function loadData() {
 }
 
 async function init() {
+  bindViewportMetrics();
   bindEvents();
   renderCart();
 
