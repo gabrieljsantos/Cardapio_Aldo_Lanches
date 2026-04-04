@@ -502,17 +502,32 @@ function renderCategoryNav(roots) {
   });
 }
 
-function renderBranch(category, children, itemsByCategory, depth = 0) {
+function renderBranch(category, children, itemsByCategory, depth = 0, trail = []) {
   const section = document.createElement("section");
-  section.className = depth === 0 ? "menu-section" : "sub-section";
+  section.className = depth === 0 ? "menu-section" : `sub-section depth-${depth}`;
+  section.dataset.depth = String(depth);
 
   const ownItems = sortByPriorityThenName(itemsByCategory.get(category.id) || []);
   const descendants = children[category.id] || [];
+  const currentTrail = [...trail, category.name];
+  const showPath = depth > 0 && (ownItems.length > 0 || descendants.length === 0);
 
-  const title = document.createElement(depth === 0 ? "h2" : "h3");
-  title.className = depth === 0 ? "section-title" : "sub-title";
-  title.textContent = category.name;
-  section.appendChild(title);
+  if (showPath) {
+    const path = document.createElement("div");
+    path.className = "sub-path";
+    const relativeTrail = currentTrail.slice(1).join(" > ");
+    path.textContent = `> ${relativeTrail}`;
+    section.appendChild(path);
+  } else if (depth > 0 && ownItems.length === 0 && descendants.length > 0) {
+    section.classList.add("compact-node");
+  }
+
+  if (depth === 0) {
+    const title = document.createElement("h2");
+    title.className = "section-title";
+    title.textContent = category.name;
+    section.appendChild(title);
+  }
 
   if (ownItems.length > 0) {
     const mode = (category.display_mode === "grade" || category.display_mode === "grid") ? "grade" : "lista";
@@ -527,7 +542,7 @@ function renderBranch(category, children, itemsByCategory, depth = 0) {
   }
 
   descendants.forEach((child) => {
-    const childNode = renderBranch(child, children, itemsByCategory, depth + 1);
+    const childNode = renderBranch(child, children, itemsByCategory, depth + 1, currentTrail);
     if (childNode) {
       section.appendChild(childNode);
     }

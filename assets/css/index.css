@@ -209,6 +209,21 @@ img {
   letter-spacing: 0.01em;
 }
 
+.sub-section {
+  margin-top: 10px;
+}
+
+.sub-path {
+  margin: 8px 0 12px;
+  display: block;
+  line-height: 1.35;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .sub-title {
   margin: 14px 0 10px;
   font-size: 1rem;
@@ -216,6 +231,42 @@ img {
   font-weight: 700;
   border-bottom: 1px solid var(--line);
   padding-bottom: 7px;
+}
+
+.sub-section.depth-1 {
+  margin-top: 14px;
+  padding-left: 12px;
+  border-left: 3px solid #99d9d2;
+}
+
+.sub-section.depth-1 > .sub-title {
+  color: #0f766e;
+}
+
+.sub-section.depth-2,
+.sub-section.depth-3,
+.sub-section.depth-4 {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px dashed #b8d6dc;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(239, 250, 248, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%);
+}
+
+.sub-section.depth-2 > .sub-title,
+.sub-section.depth-3 > .sub-title,
+.sub-section.depth-4 > .sub-title {
+  color: #115e59;
+  font-size: 0.95rem;
+}
+
+.sub-section.compact-node {
+  margin-top: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  display: grid;
+  gap: 10px;
 }
 
 .items-list {
