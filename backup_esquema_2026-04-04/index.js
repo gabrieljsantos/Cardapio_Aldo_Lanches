@@ -19,10 +19,7 @@ const state = {
   searchTerm: "",
   cart: [],
   modalQty: 1,
-  photoRotationTimer: null,
-  revealObserver: null,
-  lockedScrollY: 0,
-  visibleReactTimer: null
+  photoRotationTimer: null
 };
 
 const ui = {
@@ -145,19 +142,6 @@ function openCart() {
 
 function closeCart() {
   ui.cartBackdrop.classList.remove("show");
-}
-
-function lockPageScroll() {
-  state.lockedScrollY = window.scrollY || window.pageYOffset || 0;
-  document.body.style.top = `-${state.lockedScrollY}px`;
-  document.body.classList.add("modal-open");
-}
-
-function unlockPageScroll() {
-  const y = state.lockedScrollY || 0;
-  document.body.classList.remove("modal-open");
-  document.body.style.top = "";
-  window.scrollTo(0, y);
 }
 
 function returnToHomeView() {
@@ -507,8 +491,6 @@ function renderCategoryNav(roots) {
   roots.forEach((root, index) => {
     const btn = document.createElement("button");
     btn.className = `cat-btn${index === 0 ? " active" : ""}`;
-    btn.classList.add("nav-reveal");
-    btn.style.setProperty("--nav-index", String(index));
     btn.textContent = root.name;
 
     btn.addEventListener("click", () => {
@@ -519,113 +501,6 @@ function renderCategoryNav(roots) {
 
     ui.catNav.appendChild(btn);
   });
-}
-
-function setupMenuReveal() {
-  if (state.revealObserver) {
-    state.revealObserver.disconnect();
-    state.revealObserver = null;
-  }
-
-  const targets = [
-    ...ui.menu.querySelectorAll(".menu-section, .sub-section, .item-card")
-  ];
-
-  if (!targets.length) {
-    return;
-  }
-
-  targets.forEach((el, index) => {
-    el.classList.add("reveal-item");
-    el.classList.remove("reveal-in");
-    el.style.setProperty("--reveal-index", String(index % 12));
-  });
-
-  const cards = [...ui.menu.querySelectorAll(".item-card")];
-  cards.forEach((card, index) => {
-    card.style.setProperty("--float-index", String(index % 10));
-  });
-
-  if (!("IntersectionObserver" in window)) {
-    targets.forEach((el) => {
-      el.classList.add("reveal-in", "visible-react");
-      setTimeout(() => el.classList.remove("visible-react"), 950);
-    });
-    return;
-  }
-
-  state.revealObserver = new IntersectionObserver(
-    (entries, observer) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) {
-          return;
-        }
-
-        entry.target.classList.add("reveal-in");
-        entry.target.classList.add("visible-react");
-        setTimeout(() => entry.target.classList.remove("visible-react"), 950);
-        observer.unobserve(entry.target);
-      });
-    },
-    {
-      threshold: 0.14,
-      rootMargin: "0px 0px -6% 0px"
-    }
-  );
-
-  targets.forEach((el) => state.revealObserver.observe(el));
-}
-
-function nextVisibleReactDelayMs() {
-  const seconds = 10 + (Math.random() * 10 - 5);
-  return Math.max(5000, Math.round(seconds * 1000));
-}
-
-function getVisibleCards() {
-  const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
-  return [...ui.menu.querySelectorAll(".item-card")].filter((card) => {
-    if (!card.isConnected || card.style.display === "none") {
-      return false;
-    }
-
-    const rect = card.getBoundingClientRect();
-    const visibleHeight = Math.min(rect.bottom, viewportH) - Math.max(rect.top, 0);
-    return visibleHeight >= Math.min(48, rect.height * 0.35);
-  });
-}
-
-function triggerCardVisibleReact(card) {
-  if (!card) {
-    return;
-  }
-
-  card.classList.remove("visible-react");
-  void card.offsetWidth;
-  card.classList.add("visible-react");
-  setTimeout(() => card.classList.remove("visible-react"), 950);
-}
-
-function scheduleVisibleReactLoop() {
-  if (state.visibleReactTimer) {
-    clearTimeout(state.visibleReactTimer);
-    state.visibleReactTimer = null;
-  }
-
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    return;
-  }
-
-  const run = () => {
-    const cards = getVisibleCards();
-    if (cards.length) {
-      const pick = cards[Math.floor(Math.random() * cards.length)];
-      triggerCardVisibleReact(pick);
-    }
-
-    state.visibleReactTimer = setTimeout(run, nextVisibleReactDelayMs());
-  };
-
-  state.visibleReactTimer = setTimeout(run, nextVisibleReactDelayMs());
 }
 
 function renderBranch(category, children, itemsByCategory, depth = 0, trail = []) {
@@ -716,8 +591,6 @@ function renderMenu() {
   renderCategoryNav(roots.filter((root) => document.getElementById(`cat-${root.id}`)));
   applySearch();
   startPhotoRotation();
-  setupMenuReveal();
-  scheduleVisibleReactLoop();
 }
 
 function renderHeader() {
@@ -912,7 +785,7 @@ function openItemModal(item, options = {}) {
       <div class="modal-scroll">
         <div class="modal-head">
           <img class="modal-photo" src="${mainPhoto}" alt="${safeName}" onerror="this.onerror=null;this.src='${DEFAULT_ITEM_IMAGE}'">
-          <button class="modal-close" id="modalClose" aria-label="Fechar">X</button>
+          <button class="modal-close" id="modalClose" aria-label="Fechar">Fechar</button>
         </div>
         <div class="modal-content">
           <h3 class="modal-title">${safeName}</h3>
@@ -943,7 +816,7 @@ function openItemModal(item, options = {}) {
   `;
 
   ui.modal.classList.add("show");
-  lockPageScroll();
+  document.body.classList.add("modal-open");
 
   document.getElementById("modalClose")?.addEventListener("click", closeModal);
   document.getElementById("compToggleBtn")?.addEventListener("click", () => {
@@ -1118,7 +991,7 @@ function openItemModal(item, options = {}) {
 function closeModal() {
   ui.modal.classList.remove("show");
   ui.modalBody.innerHTML = "";
-  unlockPageScroll();
+  document.body.classList.remove("modal-open");
 }
 
 function bindEvents() {
