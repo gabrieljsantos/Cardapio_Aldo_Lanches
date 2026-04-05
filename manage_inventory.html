@@ -1,0 +1,991 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerenciar Estoque (Site) | Smart Store Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #f4f0e8;
+      --ink: #0f1d2b;
+      --muted: #4f5f70;
+      --card: #fffcf8;
+      --line: #d9ccb7;
+      --brand: #d64933;
+      --brand-2: #0b5d6b;
+      --ok: #1f7a45;
+      --warn: #c66a08;
+      --radius: 14px;
+      --shadow: 0 10px 30px rgba(15, 29, 43, 0.12);
+      --hero-offset: 12px;
+      --hero-height: 270px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Instrument Sans", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(214, 73, 51, 0.11) 0, rgba(214, 73, 51, 0) 38%),
+        radial-gradient(circle at 89% 17%, rgba(11, 93, 107, 0.09) 0, rgba(11, 93, 107, 0) 44%),
+        linear-gradient(180deg, #f8f3ea 0%, #f2ece3 100%);
+      min-height: 100vh;
+      padding-bottom: 96px;
+    }
+
+    .shell {
+      width: min(1320px, 94vw);
+      margin: 24px auto 56px;
+      padding-top: calc(var(--hero-height) + var(--hero-offset) + 10px);
+    }
+
+    .hero {
+      padding: 22px;
+      border: 1px solid #eadcca;
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      background: linear-gradient(145deg, #fff6ea, #fffdfa);
+      position: fixed;
+      top: var(--hero-offset);
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(1320px, 94vw);
+      z-index: 30;
+    }
+
+    .title {
+      margin: 0;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: clamp(1.35rem, 3vw, 2rem);
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      margin: 8px 0 16px;
+      color: var(--muted);
+      font-size: 0.96rem;
+    }
+
+    .toolbar {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      align-items: center;
+    }
+
+    .toolbar input[type="search"],
+    .toolbar select,
+    .toolbar button,
+    .toolbar a {
+      min-height: 42px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font: inherit;
+      font-size: 0.9rem;
+    }
+
+    .toolbar input[type="search"],
+    .toolbar select {
+      padding: 0 14px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .toolbar button,
+    .toolbar a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
+      cursor: pointer;
+      background: #fff;
+      color: var(--ink);
+      transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+    }
+
+    .toolbar button:hover,
+    .toolbar a:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(15, 29, 43, 0.12);
+    }
+
+    .btn-brand {
+      background: var(--brand);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .btn-brand-2 {
+      background: var(--brand-2);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .floating-send {
+      background: linear-gradient(135deg, #0b7a4b, #18a05f);
+      color: #fff;
+      border-color: #0a6b42;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      box-shadow: 0 10px 20px rgba(24, 160, 95, 0.28), 0 0 0 2px rgba(255, 255, 255, 0.85) inset;
+      position: fixed;
+      right: 18px;
+      bottom: 16px;
+      min-height: 52px;
+      min-width: 220px;
+      border-radius: 999px;
+      border: 1px solid #0a6b42;
+      padding: 0 20px;
+      font: inherit;
+      cursor: pointer;
+      z-index: 40;
+      animation: sendPulse 2.1s ease-in-out infinite;
+    }
+
+    .floating-send:hover {
+      background: linear-gradient(135deg, #0a6b42, #138652);
+      box-shadow: 0 12px 24px rgba(19, 134, 82, 0.34), 0 0 0 2px rgba(255, 255, 255, 0.88) inset;
+    }
+
+    .floating-send:focus-visible {
+      outline: 3px solid rgba(24, 160, 95, 0.35);
+      outline-offset: 2px;
+    }
+
+    @keyframes sendPulse {
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-1px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .floating-send {
+        animation: none;
+      }
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .chip {
+      border-radius: 999px;
+      padding: 7px 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 0.84rem;
+      color: var(--muted);
+    }
+
+    .status {
+      margin-top: 10px;
+      min-height: 1.2em;
+      font-size: 0.92rem;
+      color: var(--brand-2);
+    }
+
+    .groups {
+      margin-top: 18px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .group {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--card);
+      box-shadow: 0 8px 24px rgba(15, 29, 43, 0.07);
+      overflow: hidden;
+    }
+
+    .group-head {
+      padding: 14px 16px;
+      background: linear-gradient(90deg, rgba(214, 73, 51, 0.1), rgba(11, 93, 107, 0.06));
+      border-bottom: 1px solid var(--line);
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 1rem;
+      letter-spacing: 0.01em;
+    }
+
+    .rows {
+      display: grid;
+      gap: 0;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 90px 1.3fr 1.2fr 150px 150px 120px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid #efe4d3;
+    }
+
+    .row:last-child { border-bottom: 0; }
+
+    .row.hidden {
+      opacity: 0.75;
+      background: rgba(15, 29, 43, 0.03);
+    }
+
+    .photo {
+      width: 78px;
+      height: 58px;
+      border-radius: 9px;
+      object-fit: cover;
+      border: 1px solid #e9dbc8;
+      background: #f0e6d7;
+    }
+
+    .identity {
+      min-width: 0;
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+
+    .identity .label {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .identity .value {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: block;
+      font-weight: 600;
+    }
+
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.84rem;
+      color: var(--ink);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle-input {
+      position: absolute;
+      opacity: 0;
+      width: 1px;
+      height: 1px;
+      pointer-events: none;
+    }
+
+    .toggle-track {
+      width: 46px;
+      height: 26px;
+      border-radius: 999px;
+      border: 1px solid #cdbba3;
+      background: #e8dccb;
+      position: relative;
+      transition: background 0.2s ease, border-color 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .toggle-track::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(15, 29, 43, 0.18);
+      transition: transform 0.2s ease;
+    }
+
+    .toggle-input:checked + .toggle-track {
+      background: rgba(214, 73, 51, 0.9);
+      border-color: rgba(214, 73, 51, 0.9);
+    }
+
+    .toggle-input:checked + .toggle-track::after {
+      transform: translateX(20px);
+    }
+
+    .toggle-text {
+      min-width: 52px;
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .toggle-input:checked ~ .toggle-text {
+      color: var(--ink);
+    }
+
+    .stock {
+      width: 100%;
+      min-height: 38px;
+      border-radius: 11px;
+      border: 1px solid var(--line);
+      padding: 0 10px;
+      font: inherit;
+      text-align: center;
+      background: #fff;
+    }
+
+    .payload-wrap {
+      margin-top: 18px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fffefb;
+      padding: 12px;
+    }
+
+    .payload-title {
+      margin: 0 0 8px;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 0.96rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 220px;
+      resize: vertical;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 10px;
+      font: 500 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: #fff;
+      color: #152331;
+    }
+
+    .note {
+      margin-top: 8px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+
+    @media (max-width: 1100px) {
+      .toolbar {
+        grid-template-columns: 1fr 1fr 1fr;
+      }
+
+      .row {
+        grid-template-columns: 76px 1fr 1fr;
+        grid-template-areas:
+          "photo id name"
+          "photo hidden finished"
+          "photo stock stock";
+      }
+
+      .row .cell-photo { grid-area: photo; }
+      .row .cell-id { grid-area: id; }
+      .row .cell-name { grid-area: name; }
+      .row .cell-hidden { grid-area: hidden; }
+      .row .cell-finished { grid-area: finished; }
+      .row .cell-stock { grid-area: stock; }
+
+      .stock {
+        min-height: 42px;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .shell {
+        width: min(98vw, 98vw);
+        margin: 10px auto 26px;
+        padding-top: calc(var(--hero-height) + var(--hero-offset) + 8px);
+      }
+
+      .hero {
+        padding: 16px;
+        border-radius: 16px;
+        width: min(98vw, 98vw);
+      }
+
+      .subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 12px;
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .toolbar input[type="search"] {
+        grid-column: 1 / -1;
+      }
+
+      .toolbar input[type="search"],
+      .toolbar select,
+      .toolbar button,
+      .toolbar a {
+        min-height: 44px;
+        font-size: 0.88rem;
+      }
+
+      .group-head {
+        padding: 12px 12px;
+      }
+
+      .row {
+        grid-template-columns: 76px 1fr;
+        grid-template-areas:
+          "photo id"
+          "photo name"
+          "photo stock"
+          "hidden finished";
+        align-items: start;
+        gap: 8px;
+        padding: 10px;
+      }
+
+      .identity {
+        font-size: 0.85rem;
+      }
+
+      .identity .value {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: unset;
+      }
+
+      .cell-hidden,
+      .cell-finished {
+        align-self: center;
+      }
+
+      .cell-stock {
+        width: min(180px, 100%);
+      }
+
+      .payload-wrap {
+        margin-top: 14px;
+        padding: 10px;
+      }
+
+      textarea {
+        min-height: 180px;
+      }
+
+      .floating-send {
+        right: 10px;
+        left: 10px;
+        min-width: 0;
+        bottom: 10px;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar input[type="search"] {
+        grid-column: auto;
+      }
+
+      .row {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "photo"
+          "id"
+          "name"
+          "hidden"
+          "finished"
+          "stock";
+      }
+
+      .cell-photo {
+        justify-self: start;
+      }
+
+      .photo {
+        width: 96px;
+        height: 72px;
+      }
+
+      .cell-stock {
+        width: 100%;
+      }
+
+      .toggle {
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .toggle-text {
+        margin-left: auto;
+      }
+
+      .meta {
+        gap: 6px;
+      }
+
+      .chip {
+        font-size: 0.78rem;
+        padding: 6px 10px;
+      }
+
+      .floating-send {
+        min-height: 50px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <h1 class="title">Gerenciar Estoque (site)</h1>
+      <p class="subtitle">Lista agrupada por categoria com foto, id, nome, ocultar, finalizado e estoque inteiro. Gere o texto e envie para @AldoLanches_bot.</p>
+
+      <div class="toolbar">
+        <input id="searchInput" type="search" placeholder="Buscar por id ou nome">
+        <select id="identifierMode" title="Identificador do payload">
+          <option value="id" selected>Payload por ID</option>
+          <option value="name">Payload por Nome</option>
+        </select>
+        <select id="payloadScope" title="Escopo do payload">
+          <option value="changed" selected>Somente modificacoes</option>
+          <option value="all">Todos os itens filtrados</option>
+        </select>
+        <button id="loadBtn" class="btn-brand" type="button">Carregar itens</button>
+        <button id="generateBtn" class="btn-brand-2" type="button">Gerar texto</button>
+        <button id="copyBtn" type="button">Copiar texto</button>
+        <a id="botLink" href="https://t.me/AldoLanches_bot" target="_blank" rel="noopener">Abrir bot</a>
+      </div>
+
+      <div class="meta">
+        <span class="chip" id="chipTotal">Itens: 0</span>
+        <span class="chip" id="chipVisible">Visiveis: 0</span>
+        <span class="chip" id="chipHidden">Ocultos: 0</span>
+        <span class="chip" id="chipFinished">Finalizados: 0</span>
+        <span class="chip" id="chipChanged">Alterados: 0</span>
+      </div>
+
+      <div class="status" id="status">Clique em Carregar itens.</div>
+    </section>
+
+    <main class="groups" id="groups"></main>
+
+    <section class="payload-wrap">
+      <h2 class="payload-title">Texto para enviar ao bot</h2>
+      <textarea id="payloadOutput" placeholder="Clique em Gerar texto para montar SITE_STOCK_BULK..."></textarea>
+      <p class="note">Dica: para muitos itens, copie e cole manualmente no chat com o bot (links podem ter limite de tamanho).</p>
+    </section>
+  </div>
+
+  <button id="sendBtn" class="floating-send" type="button">Enviar modificacao</button>
+
+  <script>
+    const { createClient } = supabase;
+
+    const SUPABASE_URL = "https://bbrpnbetwwnwpwogjjrv.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_t5jkscaZPjrdbs_2uSFK4g_PjZeK3yi";
+    const DEFAULT_IMAGE = "assets/standard%20image.jpg";
+
+    const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const state = {
+      categories: [],
+      items: [],
+      grouped: [],
+      search: ""
+    };
+
+    const ui = {
+      hero: document.querySelector(".hero"),
+      searchInput: document.getElementById("searchInput"),
+      identifierMode: document.getElementById("identifierMode"),
+      payloadScope: document.getElementById("payloadScope"),
+      loadBtn: document.getElementById("loadBtn"),
+      generateBtn: document.getElementById("generateBtn"),
+      sendBtn: document.getElementById("sendBtn"),
+      copyBtn: document.getElementById("copyBtn"),
+      status: document.getElementById("status"),
+      groups: document.getElementById("groups"),
+      payloadOutput: document.getElementById("payloadOutput"),
+      chipTotal: document.getElementById("chipTotal"),
+      chipVisible: document.getElementById("chipVisible"),
+      chipHidden: document.getElementById("chipHidden"),
+      chipFinished: document.getElementById("chipFinished"),
+      chipChanged: document.getElementById("chipChanged")
+    };
+
+    function syncHeroHeight() {
+      const h = Math.ceil(ui.hero.getBoundingClientRect().height);
+      document.documentElement.style.setProperty("--hero-height", `${h}px`);
+    }
+
+    function safeImage(url) {
+      const value = String(url || "").trim();
+      if (!value) return DEFAULT_IMAGE;
+      if (/^https?:\/\//i.test(value) || value.startsWith("assets/")) return value;
+      return DEFAULT_IMAGE;
+    }
+
+    function normalize(text) {
+      return String(text || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+    }
+
+    function findRootCategoryName(item, byId) {
+      const node = item.node_category || {};
+      let current = node && node.id ? byId.get(node.id) : null;
+      if (!current) {
+        return (node.name || "Sem categoria").trim() || "Sem categoria";
+      }
+
+      const seen = new Set();
+      while (current.parent_id && byId.has(current.parent_id) && !seen.has(current.id)) {
+        seen.add(current.id);
+        current = byId.get(current.parent_id);
+      }
+
+      return (current.name || "Sem categoria").trim() || "Sem categoria";
+    }
+
+    function computeInitialFlags(item) {
+      const stock = Number(item.stock || 0);
+      return {
+        hidden: stock < 0,
+        finished: stock === 0,
+        stock: stock > 0 ? stock : 0
+      };
+    }
+
+    function isRowChanged(row) {
+      return row.hidden !== row.initialHidden || row.finished !== row.initialFinished || row.stock !== row.initialStock;
+    }
+
+    function buildGrouped(items, categories) {
+      const byId = new Map(categories.map((c) => [c.id, c]));
+      const groupedMap = new Map();
+
+      items.forEach((item) => {
+        const groupName = findRootCategoryName(item, byId);
+        if (!groupedMap.has(groupName)) {
+          groupedMap.set(groupName, []);
+        }
+
+        const flags = computeInitialFlags(item);
+        groupedMap.get(groupName).push({
+          item,
+          hidden: flags.hidden,
+          finished: flags.finished,
+          stock: flags.stock,
+          initialHidden: flags.hidden,
+          initialFinished: flags.finished,
+          initialStock: flags.stock,
+          photo: item.photo_url_1 || item.photo_url_2 || item.photo_url_3 || "-"
+        });
+      });
+
+      return [...groupedMap.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0], "pt-BR", { sensitivity: "base" }))
+        .map(([category, rows]) => ({
+          category,
+          rows: rows.sort((a, b) => String(a.item.name || "").localeCompare(String(b.item.name || ""), "pt-BR", { sensitivity: "base" }))
+        }));
+    }
+
+    function updateMetrics() {
+      const allRows = state.grouped.flatMap((g) => g.rows);
+      const total = allRows.length;
+      const hidden = allRows.filter((r) => r.hidden).length;
+      const finished = allRows.filter((r) => !r.hidden && r.finished).length;
+      const visible = total - hidden - finished;
+      const changed = allRows.filter(isRowChanged).length;
+
+      ui.chipTotal.textContent = `Itens: ${total}`;
+      ui.chipVisible.textContent = `Visiveis: ${visible}`;
+      ui.chipHidden.textContent = `Ocultos: ${hidden}`;
+      ui.chipFinished.textContent = `Finalizados: ${finished}`;
+      ui.chipChanged.textContent = `Alterados: ${changed}`;
+    }
+
+    function rowMatches(row) {
+      const term = normalize(state.search);
+      if (!term) return true;
+      return normalize(row.item.id).includes(term) || normalize(row.item.name).includes(term);
+    }
+
+    function render() {
+      const fragment = document.createDocumentFragment();
+      let renderedRows = 0;
+
+      state.grouped.forEach((group) => {
+        const filteredRows = group.rows.filter(rowMatches);
+        if (!filteredRows.length) return;
+
+        const section = document.createElement("section");
+        section.className = "group";
+
+        const head = document.createElement("div");
+        head.className = "group-head";
+        head.textContent = `${group.category} (${filteredRows.length})`;
+
+        const rowsWrap = document.createElement("div");
+        rowsWrap.className = "rows";
+
+        filteredRows.forEach((row, idx) => {
+          renderedRows += 1;
+
+          const article = document.createElement("article");
+          article.className = `row${row.hidden ? " hidden" : ""}`;
+
+          const photoCell = document.createElement("div");
+          photoCell.className = "cell-photo";
+          const img = document.createElement("img");
+          img.className = "photo";
+          img.src = safeImage(row.photo);
+          img.alt = `Foto de ${row.item.name || "item"}`;
+          img.loading = "lazy";
+          photoCell.appendChild(img);
+
+          const idCell = document.createElement("div");
+          idCell.className = "identity cell-id";
+          idCell.innerHTML = '<span class="label">ID</span><span class="value"></span>';
+          idCell.querySelector(".value").textContent = String(row.item.id || "-");
+
+          const nameCell = document.createElement("div");
+          nameCell.className = "identity cell-name";
+          nameCell.innerHTML = '<span class="label">Name</span><span class="value"></span>';
+          nameCell.querySelector(".value").textContent = String(row.item.name || "-");
+
+          const hiddenCell = document.createElement("label");
+          hiddenCell.className = "toggle cell-hidden";
+          const hiddenInput = document.createElement("input");
+          hiddenInput.type = "checkbox";
+          hiddenInput.className = "toggle-input";
+          hiddenInput.setAttribute("aria-label", `Ocultar ${row.item.name || row.item.id || "item"}`);
+          hiddenInput.checked = row.hidden;
+          const hiddenTrack = document.createElement("span");
+          hiddenTrack.className = "toggle-track";
+          const hiddenText = document.createElement("span");
+          hiddenText.className = "toggle-text";
+          hiddenText.textContent = "Ocultar";
+          hiddenInput.addEventListener("change", () => {
+            row.hidden = hiddenInput.checked;
+            if (row.hidden) {
+              row.finished = false;
+              finishedInput.checked = false;
+            }
+            article.classList.toggle("hidden", row.hidden);
+            updateMetrics();
+          });
+          hiddenCell.append(hiddenInput, hiddenTrack, hiddenText);
+
+          const finishedCell = document.createElement("label");
+          finishedCell.className = "toggle cell-finished";
+          const finishedInput = document.createElement("input");
+          finishedInput.type = "checkbox";
+          finishedInput.className = "toggle-input";
+          finishedInput.setAttribute("aria-label", `Finalizar ${row.item.name || row.item.id || "item"}`);
+          finishedInput.checked = row.finished;
+          const finishedTrack = document.createElement("span");
+          finishedTrack.className = "toggle-track";
+          const finishedText = document.createElement("span");
+          finishedText.className = "toggle-text";
+          finishedText.textContent = "Finalizar";
+          finishedInput.addEventListener("change", () => {
+            row.finished = finishedInput.checked;
+            if (row.finished) {
+              row.hidden = false;
+              hiddenInput.checked = false;
+            }
+            article.classList.toggle("hidden", row.hidden);
+            updateMetrics();
+          });
+          finishedCell.append(finishedInput, finishedTrack, finishedText);
+
+          const stockCell = document.createElement("div");
+          stockCell.className = "cell-stock";
+          const stockInput = document.createElement("input");
+          stockInput.className = "stock";
+          stockInput.type = "number";
+          stockInput.step = "1";
+          stockInput.value = String(Number.isFinite(row.stock) ? row.stock : 0);
+          stockInput.addEventListener("change", () => {
+            const n = Number(stockInput.value);
+            row.stock = Number.isFinite(n) ? Math.trunc(n) : 0;
+            stockInput.value = String(row.stock);
+          });
+          stockCell.appendChild(stockInput);
+
+          article.append(photoCell, idCell, nameCell, hiddenCell, finishedCell, stockCell);
+          rowsWrap.appendChild(article);
+        });
+
+        section.append(head, rowsWrap);
+        fragment.appendChild(section);
+      });
+
+      ui.groups.innerHTML = "";
+      if (renderedRows === 0) {
+        ui.groups.innerHTML = '<section class="group"><div class="group-head">Nenhum item encontrado para o filtro.</div></section>';
+      } else {
+        ui.groups.appendChild(fragment);
+      }
+
+      updateMetrics();
+    }
+
+    function buildPayload() {
+      const mode = ui.identifierMode.value === "name" ? "name" : "id";
+      const changedOnly = ui.payloadScope.value !== "all";
+      const lines = [
+        "SITE_STOCK_BULK",
+        `foto|${mode}|ocultar|finalizado|estoque`
+      ];
+
+      let included = 0;
+
+      state.grouped.forEach((group) => {
+        group.rows.forEach((row) => {
+          if (!rowMatches(row)) return;
+          if (changedOnly && !isRowChanged(row)) return;
+
+          const ref = mode === "name" ? String(row.item.name || "").trim() : String(row.item.id || "").trim();
+          if (!ref) return;
+
+          const photo = String(row.photo || "").trim() || "-";
+          const hidden = row.hidden ? "sim" : "nao";
+          const finished = row.finished ? "sim" : "nao";
+          const stock = Number.isFinite(row.stock) ? Math.trunc(row.stock) : 0;
+
+          lines.push(`${photo}|${ref}|${hidden}|${finished}|${stock}`);
+          included += 1;
+        });
+      });
+
+      return {
+        text: lines.join("\n"),
+        included,
+        changedOnly
+      };
+    }
+
+    function openTelegramWithPayload(payload) {
+      const shareText = encodeURIComponent(`Atualizacao de estoque para @AldoLanches_bot\n\n${payload}`);
+      const share = `https://t.me/share/url?url=&text=${shareText}`;
+      window.open(share, "_blank", "noopener");
+    }
+
+    async function loadData() {
+      ui.status.textContent = "Carregando categorias e itens...";
+      ui.status.className = "status";
+
+      try {
+        const [{ data: categories, error: catError }, { data: items, error: itemError }] = await Promise.all([
+          db.from("node_category").select("id,name,parent_id,sort_priority").order("sort_priority", { ascending: true }).order("name", { ascending: true }),
+          db.from("items").select("id,name,stock,photo_url_1,photo_url_2,photo_url_3,node_category(id,name,parent_id)").order("sort_priority", { ascending: true }).order("name", { ascending: true })
+        ]);
+
+        if (catError) throw catError;
+        if (itemError) throw itemError;
+
+        state.categories = categories || [];
+        state.items = items || [];
+        state.grouped = buildGrouped(state.items, state.categories);
+
+        render();
+
+        ui.status.textContent = `OK. ${state.items.length} item(ns) carregado(s).`;
+        ui.status.className = "status ok";
+      } catch (err) {
+        ui.status.textContent = `Falha ao carregar dados: ${err.message || err}`;
+        ui.status.className = "status warn";
+      }
+    }
+
+    async function copyPayload() {
+      const payload = ui.payloadOutput.value.trim();
+      if (!payload) {
+        ui.status.textContent = "Gere o texto antes de copiar.";
+        ui.status.className = "status warn";
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(payload);
+        ui.status.textContent = "Texto copiado. Cole no chat @AldoLanches_bot.";
+        ui.status.className = "status ok";
+      } catch (err) {
+        ui.status.textContent = "Nao foi possivel copiar automaticamente. Copie manualmente no campo de texto.";
+        ui.status.className = "status warn";
+      }
+    }
+
+    ui.loadBtn.addEventListener("click", loadData);
+
+    ui.generateBtn.addEventListener("click", () => {
+      const result = buildPayload();
+      ui.payloadOutput.value = result.text;
+      if (result.included === 0 && result.changedOnly) {
+        ui.status.textContent = "Nenhuma modificacao detectada. O payload foi gerado apenas com o cabecalho.";
+        ui.status.className = "status warn";
+        return;
+      }
+
+      ui.status.textContent = `Texto gerado com ${result.included} item(ns). Clique em Copiar texto e envie para o bot.`;
+      ui.status.className = "status ok";
+    });
+
+    ui.sendBtn.addEventListener("click", () => {
+      const result = buildPayload();
+      ui.payloadOutput.value = result.text;
+
+      if (result.included === 0 && result.changedOnly) {
+        ui.status.textContent = "Nada para enviar: nenhuma modificacao detectada.";
+        ui.status.className = "status warn";
+        return;
+      }
+
+      if (result.text.length > 3500) {
+        ui.status.textContent = "Payload grande para link. Use Copiar texto e cole manualmente no bot.";
+        ui.status.className = "status warn";
+        return;
+      }
+
+      openTelegramWithPayload(result.text);
+      ui.status.textContent = `Abrindo Telegram com ${result.included} item(ns) para envio.`;
+      ui.status.className = "status ok";
+    });
+
+    ui.copyBtn.addEventListener("click", copyPayload);
+
+    ui.searchInput.addEventListener("input", (event) => {
+      state.search = event.target.value || "";
+      render();
+    });
+
+    window.addEventListener("resize", syncHeroHeight);
+
+    syncHeroHeight();
+    loadData();
+  </script>
+</body>
+</html>
