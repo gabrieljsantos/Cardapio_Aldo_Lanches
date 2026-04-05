@@ -21,8 +21,6 @@
       --warn: #c66a08;
       --radius: 14px;
       --shadow: 0 10px 30px rgba(15, 29, 43, 0.12);
-      --hero-offset: 12px;
-      --hero-height: 270px;
     }
 
     * { box-sizing: border-box; }
@@ -42,7 +40,6 @@
     .shell {
       width: min(1320px, 94vw);
       margin: 24px auto 56px;
-      padding-top: calc(var(--hero-height) + var(--hero-offset) + 10px);
     }
 
     .hero {
@@ -51,12 +48,6 @@
       border-radius: 20px;
       box-shadow: var(--shadow);
       background: linear-gradient(145deg, #fff6ea, #fffdfa);
-      position: fixed;
-      top: var(--hero-offset);
-      left: 50%;
-      transform: translateX(-50%);
-      width: min(1320px, 94vw);
-      z-index: 30;
     }
 
     .title {
@@ -412,13 +403,11 @@
       .shell {
         width: min(98vw, 98vw);
         margin: 10px auto 26px;
-        padding-top: calc(var(--hero-height) + var(--hero-offset) + 8px);
       }
 
       .hero {
         padding: 16px;
         border-radius: 16px;
-        width: min(98vw, 98vw);
       }
 
       .subtitle {
@@ -505,23 +494,21 @@
       }
 
       .row {
-        grid-template-columns: 1fr;
+        grid-template-columns: 72px 1fr 1fr;
         grid-template-areas:
-          "photo"
-          "id"
-          "name"
-          "hidden"
-          "finished"
-          "stock";
+          "photo id name"
+          "photo hidden finished"
+          "photo stock stock";
       }
 
       .cell-photo {
         justify-self: start;
+        align-self: start;
       }
 
       .photo {
-        width: 96px;
-        height: 72px;
+        width: 64px;
+        height: 64px;
       }
 
       .cell-stock {
@@ -529,12 +516,12 @@
       }
 
       .toggle {
-        justify-content: space-between;
-        width: 100%;
+        justify-content: flex-start;
+        width: auto;
       }
 
       .toggle-text {
-        margin-left: auto;
+        margin-left: 0;
       }
 
       .meta {
@@ -613,7 +600,6 @@
     };
 
     const ui = {
-      hero: document.querySelector(".hero"),
       searchInput: document.getElementById("searchInput"),
       identifierMode: document.getElementById("identifierMode"),
       payloadScope: document.getElementById("payloadScope"),
@@ -630,11 +616,6 @@
       chipFinished: document.getElementById("chipFinished"),
       chipChanged: document.getElementById("chipChanged")
     };
-
-    function syncHeroHeight() {
-      const h = Math.ceil(ui.hero.getBoundingClientRect().height);
-      document.documentElement.style.setProperty("--hero-height", `${h}px`);
-    }
 
     function safeImage(url) {
       const value = String(url || "").trim();
@@ -871,7 +852,7 @@
           const ref = mode === "name" ? String(row.item.name || "").trim() : String(row.item.id || "").trim();
           if (!ref) return;
 
-          const photo = String(row.photo || "").trim() || "-";
+          const photo = "-";
           const hidden = row.hidden ? "sim" : "nao";
           const finished = row.finished ? "sim" : "nao";
           const stock = Number.isFinite(row.stock) ? Math.trunc(row.stock) : 0;
@@ -889,9 +870,9 @@
     }
 
     function openTelegramWithPayload(payload) {
-      const shareText = encodeURIComponent(`Atualizacao de estoque para @AldoLanches_bot\n\n${payload}`);
-      const share = `https://t.me/share/url?url=&text=${shareText}`;
-      window.open(share, "_blank", "noopener");
+      const text = encodeURIComponent(payload);
+      const direct = `https://t.me/AldoLanches_bot?text=${text}`;
+      window.open(direct, "_blank", "noopener");
     }
 
     async function loadData() {
@@ -982,9 +963,6 @@
       render();
     });
 
-    window.addEventListener("resize", syncHeroHeight);
-
-    syncHeroHeight();
     loadData();
   </script>
 </body>
