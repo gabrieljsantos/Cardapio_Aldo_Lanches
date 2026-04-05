@@ -286,8 +286,8 @@
       width: 46px;
       height: 26px;
       border-radius: 999px;
-      border: 1px solid #cdbba3;
-      background: #e8dccb;
+      border: 1px solid #1f7a45;
+      background: #2ea85b;
       position: relative;
       transition: background 0.2s ease, border-color 0.2s ease;
       flex-shrink: 0;
@@ -318,14 +318,14 @@
     .toggle-text {
       min-width: 52px;
       font-weight: 600;
-      color: var(--muted);
+      color: var(--ok);
       font-size: 0.78rem;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
 
     .toggle-input:checked ~ .toggle-text {
-      color: var(--ink);
+      color: var(--brand);
     }
 
     .stock {
@@ -661,6 +661,14 @@
       return row.hidden !== row.initialHidden || row.finished !== row.initialFinished || row.stock !== row.initialStock;
     }
 
+    function hiddenStateLabel(isHidden) {
+      return isHidden ? "oculto" : "visivel";
+    }
+
+    function finishedStateLabel(isFinished) {
+      return isFinished ? "finalizado" : "disponivel";
+    }
+
     function buildGrouped(items, categories) {
       const byId = new Map(categories.map((c) => [c.id, c]));
       const groupedMap = new Map();
@@ -767,13 +775,19 @@
           hiddenTrack.className = "toggle-track";
           const hiddenText = document.createElement("span");
           hiddenText.className = "toggle-text";
-          hiddenText.textContent = "Ocultar";
+          hiddenText.textContent = hiddenStateLabel(row.hidden);
           hiddenInput.addEventListener("change", () => {
             row.hidden = hiddenInput.checked;
             if (row.hidden) {
               row.finished = false;
               finishedInput.checked = false;
+              finishedText.textContent = finishedStateLabel(row.finished);
             }
+            if (!row.hidden && !row.finished && row.initialStock === 0) {
+              row.stock = 1;
+              stockInput.value = "1";
+            }
+            hiddenText.textContent = hiddenStateLabel(row.hidden);
             article.classList.toggle("hidden", row.hidden);
             updateMetrics();
           });
@@ -790,13 +804,19 @@
           finishedTrack.className = "toggle-track";
           const finishedText = document.createElement("span");
           finishedText.className = "toggle-text";
-          finishedText.textContent = "Finalizar";
+          finishedText.textContent = finishedStateLabel(row.finished);
           finishedInput.addEventListener("change", () => {
             row.finished = finishedInput.checked;
             if (row.finished) {
               row.hidden = false;
               hiddenInput.checked = false;
+              hiddenText.textContent = hiddenStateLabel(row.hidden);
             }
+            if (!row.finished && !row.hidden && row.initialStock === 0) {
+              row.stock = 1;
+              stockInput.value = "1";
+            }
+            finishedText.textContent = finishedStateLabel(row.finished);
             article.classList.toggle("hidden", row.hidden);
             updateMetrics();
           });
@@ -853,8 +873,8 @@
           if (!ref) return;
 
           const photo = "-";
-          const hidden = row.hidden ? "sim" : "nao";
-          const finished = row.finished ? "sim" : "nao";
+          const hidden = row.hidden ? "oculto" : "visivel";
+          const finished = row.finished ? "finalizado" : "disponivel";
           const stock = Number.isFinite(row.stock) ? Math.trunc(row.stock) : 0;
 
           lines.push(`${photo}|${ref}|${hidden}|${finished}|${stock}`);
