@@ -584,6 +584,7 @@ img {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .item-price {
@@ -608,6 +609,16 @@ img {
   font-size: 0.75rem;
   border-radius: 999px;
   padding: 3px 8px;
+}
+
+.item-bottom .item-stock {
+  max-width: 120px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: center;
+  line-height: 1.15;
+  flex-shrink: 1;
 }
 
 .empty {
@@ -1151,6 +1162,11 @@ body.modal-open {
     grid-template-columns: 78px 1fr;
     padding: 9px;
     gap: 9px;
+  }
+
+  .item-bottom .item-stock {
+    max-width: 96px;
+    font-size: 0.7rem;
   }
 
   .items-grid .item-card {
