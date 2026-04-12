@@ -4,7 +4,6 @@ const SUPABASE_URL = "https://bbrpnbetwwnwpwogjjrv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_t5jkscaZPjrdbs_2uSFK4g_PjZeK3yi";
 
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
-const DEFAULT_ITEM_IMAGE = "assets/standard%20image.jpg";
 const FIXED_BRAND_LOGO = "assets/Aldo%20Lanches%20logo.jpg";
 
 const state = {
@@ -275,13 +274,11 @@ function escapeHtml(value) {
 
 function safeImageUrl(url) {
   const value = String(url || "").trim();
-  if (!value) {
-    return DEFAULT_ITEM_IMAGE;
-  }
+  if (!value) return "";
   if (value.startsWith("assets/") || /^https?:\/\//i.test(value)) {
     return value;
   }
-  return DEFAULT_ITEM_IMAGE;
+  return "";
 }
 
 function isValidImageUrl(url) {
@@ -412,14 +409,7 @@ function getItemPhotos(item) {
     .map((url) => String(url || "").trim())
     .filter((url) => isValidImageUrl(url));
 
-  const photos = [...new Set(ordered)];
-  if (!photos.length) {
-    return [DEFAULT_ITEM_IMAGE];
-  }
-
-  // Evita tratar a imagem padrao como "foto extra" quando ja existem fotos reais.
-  const withoutDefault = photos.filter((url) => url !== DEFAULT_ITEM_IMAGE);
-  return withoutDefault.length ? withoutDefault : [DEFAULT_ITEM_IMAGE];
+  return [...new Set(ordered)];
 }
 
 function rotateCardPhotos() {
@@ -564,6 +554,7 @@ function createItemCard(item, mode) {
   const isInert = Number(item.__effectiveStock ?? item.stock ?? 0) === 0;
   const photos = getItemPhotos(item);
   const photo = safeImageUrl(photos[0] || "");
+  const hasPhoto = Boolean(photo);
   const description = String(item.description || "").trim();
   const compositionInline = buildInlineCompositionText(item.id);
   const compositionForSearch = buildSearchCompositionText(item.id);
@@ -574,11 +565,15 @@ function createItemCard(item, mode) {
     ? `${safeDescription} <span class="item-comp-inline">${safeCompositionInline}</span>`
     : (description ? safeDescription : (compositionInline ? `<span class="item-comp-inline">${safeCompositionInline}</span>` : ""));
   const div = document.createElement("article");
-  div.className = `item-card${isInert ? " inert" : ""}`;
+  div.className = `item-card${isInert ? " inert" : ""}${hasPhoto ? "" : " no-photo"}`;
   div.dataset.search = normalize(`${item.name} ${description} ${compositionInline} ${compositionForSearch}`);
 
+  const photoMarkup = hasPhoto
+    ? `<img class="item-photo" src="${photo}" alt="${safeName}" loading="lazy">`
+    : "";
+
   div.innerHTML = `
-    <img class="item-photo" src="${photo}" alt="${safeName}" loading="lazy" onerror="this.onerror=null;this.src='${DEFAULT_ITEM_IMAGE}'">
+    ${photoMarkup}
     <div>
       <h4 class="item-name">${safeName}</h4>
       ${descWithComp ? `<p class="item-desc">${descWithComp}</p>` : ""}
@@ -906,6 +901,7 @@ function openItemModal(item, options = {}) {
   const isUnavailable = Number(item.__effectiveStock ?? item.stock ?? 0) === 0;
   const photos = getItemPhotos(item);
   const mainPhoto = safeImageUrl(photos[0] || "");
+  const hasMainPhoto = Boolean(mainPhoto);
   const description = String(item.description || "").trim();
   const safeName = escapeHtml(item.name);
   const safeDescription = escapeHtml(description);
@@ -1013,13 +1009,23 @@ function openItemModal(item, options = {}) {
     `
     : "";
 
+  const modalHead = hasMainPhoto
+    ? `
+        <div class="modal-head">
+          <img class="modal-photo" src="${mainPhoto}" alt="${safeName}">
+          <button class="modal-close" id="modalClose" aria-label="Fechar">X</button>
+        </div>
+      `
+    : `
+        <div class="modal-head no-photo">
+          <button class="modal-close" id="modalClose" aria-label="Fechar">X</button>
+        </div>
+      `;
+
   ui.modalBody.innerHTML = `
     <article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item">
       <div class="modal-scroll">
-        <div class="modal-head">
-          <img class="modal-photo" src="${mainPhoto}" alt="${safeName}" onerror="this.onerror=null;this.src='${DEFAULT_ITEM_IMAGE}'">
-          <button class="modal-close" id="modalClose" aria-label="Fechar">X</button>
-        </div>
+        ${modalHead}
         <div class="modal-content">
           <h3 class="modal-title">${safeName}</h3>
           <p class="modal-price" id="modalDynamicPrice">${currency(item.price)}</p>

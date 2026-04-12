@@ -352,6 +352,10 @@ img {
   grid-template-columns: 1fr;
 }
 
+.item-card.no-photo {
+  grid-template-columns: 1fr;
+}
+
 .item-card:hover {
   background: linear-gradient(180deg, #ffffff 0%, #f5fbfa 100%);
   border-color: #95d4cc;
@@ -686,6 +690,16 @@ img {
 
 .modal-head {
   position: relative;
+}
+
+.modal-head.no-photo {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 12px 0;
+}
+
+.modal-head.no-photo .modal-close {
+  position: static;
 }
 
 .modal-photo {
