@@ -12,7 +12,7 @@
 </head>
 <body>
   <div class="page-shell">
-    <div class="status-bar" id="status">Conectando ao banco...</div>
+    <div class="status-bar" id="status" hidden></div>
 
     <header class="header">
       <div class="header-inner">
@@ -21,14 +21,21 @@
           <h1 class="header-name" id="brandName">Restaurante</h1>
           <p class="header-hours" id="brandSchedule">Horário não informado</p>
           <div class="quick-info">
-            <span class="quick-pill">Telefone: <strong id="brandPhone">-</strong></span>
-            <span class="quick-pill">PIX: <strong id="brandPix">-</strong></span>
+            <a class="quick-pill quick-action" id="brandPhoneLink" href="#" target="_blank" rel="noopener" aria-label="Abrir conversa no WhatsApp">
+              WhatsApp: <strong id="brandPhone">-</strong>
+            </a>
+            <a class="quick-pill quick-action" id="brandPixLink" href="#" target="_blank" rel="noopener" aria-label="Abrir link de pagamento PIX">
+              <strong id="brandPix">Pagar com PIX</strong>
+            </a>
           </div>
         </div>
       </div>
     </header>
 
     <section class="tools">
+      <div id="storeInfo" class="store-info" hidden>
+        <div class="store-info-text" id="storeInfoText"></div>
+      </div>
       <input id="searchInput" class="search-box" type="search" placeholder="Buscar por nome ou descrição" aria-label="Buscar item no cardápio">
       <nav class="cat-nav" id="catNav" aria-label="Categorias"></nav>
     </section>
@@ -52,7 +59,8 @@
           <span>Total</span>
           <strong id="cartTotal">R$ 0,00</strong>
         </div>
-        <textarea id="cartNote" class="cart-note" placeholder="Observação do pedido (opcional)"></textarea>
+        <textarea id="cartNote" class="cart-note" placeholder="Especificações do pedido e da entrega (opcional)"></textarea>
+        <button type="button" class="ghost-btn remove-unavailable-btn" id="removeUnavailableBtn" hidden>Remover indisponíveis</button>
         <button type="button" class="checkout-btn" id="checkoutBtn">Finalizar no WhatsApp</button>
       </footer>
     </aside>
@@ -62,6 +70,16 @@
     <span id="cartFabCount">0 itens</span>
     <strong id="cartFabTotal">R$ 0,00</strong>
   </button>
+
+  <footer class="creditos-dev" style="text-align:center; margin: 2em 0 1em 0; font-size: 0.95em; color: #526947;">
+    Desenvolvido por <strong>Gabriel J Santos</strong>
+    &nbsp;|&nbsp;
+    <a href="https://github.com/gabrieljsantos" target="_blank" rel="noopener" style="color: #526947; text-decoration: underline;">GitHub</a>
+    &nbsp;|&nbsp;
+    <a href="https://www.linkedin.com/in/gabriel-j-santos/" target="_blank" rel="noopener" style="color: #526947; text-decoration: underline;">LinkedIn</a>
+    &nbsp;|&nbsp;
+    <a href="https://www.instagram.com/gabriel_j.santos_?igsh=azZ1b2E0b3VqdTBu" target="_blank" rel="noopener" style="color: #526947; text-decoration: underline;">Instagram</a>
+  </footer>
 
   <script src="assets/js/index.js"></script>
 </body>

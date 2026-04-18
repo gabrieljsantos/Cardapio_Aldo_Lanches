@@ -2,6 +2,7 @@ const { createClient } = supabase;
 
 const SUPABASE_URL = "https://bbrpnbetwwnwpwogjjrv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_t5jkscaZPjrdbs_2uSFK4g_PjZeK3yi";
+const CART_STORAGE_KEY = "smart-store-hub-cart-v1";
 
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 const FIXED_BRAND_LOGO = "assets/Aldo%20Lanches%20logo.jpg";
@@ -21,7 +22,11 @@ const state = {
   photoRotationTimer: null,
   revealObserver: null,
   lockedScrollY: 0,
-  visibleReactTimer: null
+  visibleReactTimer: null,
+  realtimeChannel: null,
+  refreshTimer: null,
+  refreshInFlight: false,
+  pollingTimer: null
 };
 
 const ui = {
@@ -29,8 +34,12 @@ const ui = {
   brandLogo: document.getElementById("brandLogo"),
   brandName: document.getElementById("brandName"),
   brandSchedule: document.getElementById("brandSchedule"),
+  brandPhoneLink: document.getElementById("brandPhoneLink"),
   brandPhone: document.getElementById("brandPhone"),
+  brandPixLink: document.getElementById("brandPixLink"),
   brandPix: document.getElementById("brandPix"),
+  storeInfo: document.getElementById("storeInfo"),
+  storeInfoText: document.getElementById("storeInfoText"),
   catNav: document.getElementById("catNav"),
   menu: document.getElementById("menu"),
   searchInput: document.getElementById("searchInput"),
@@ -44,6 +53,7 @@ const ui = {
   cartFabCount: document.getElementById("cartFabCount"),
   cartFabTotal: document.getElementById("cartFabTotal"),
   closeCartBtn: document.getElementById("closeCartBtn"),
+  removeUnavailableBtn: document.getElementById("removeUnavailableBtn"),
   checkoutBtn: document.getElementById("checkoutBtn")
 };
 
@@ -53,24 +63,89 @@ function getCartTotals() {
   return { count, total };
 }
 
+function getCurrentAvailabilityMap() {
+  if (!state.items.length) {
+    return null;
+  }
+
+  const visibleItems = getVisibleItems(state.items, state.groups, state.groupAssociations);
+  const map = new Map();
+  visibleItems.forEach((item) => {
+    map.set(item.id, Number(item.__effectiveStock ?? item.stock ?? 0));
+  });
+  return map;
+}
+
+function isCartEntryUnavailable(entry, availabilityMap) {
+  if (!availabilityMap) {
+    return false;
+  }
+  const stock = availabilityMap.get(entry.id);
+  return !Number.isFinite(stock) || stock <= 0;
+}
+
+function persistCart() {
+  try {
+    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart));
+  } catch (_) {
+    // Ignora falhas de armazenamento local (ex.: modo privado).
+  }
+}
+
+function restoreCart() {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) {
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return;
+    }
+
+    state.cart = parsed
+      .filter((entry) => entry && typeof entry === "object")
+      .map((entry) => ({
+        id: entry.id,
+        signature: String(entry.signature || ""),
+        name: String(entry.name || "Item"),
+        price: Number(entry.price || 0),
+        optionsText: String(entry.optionsText || ""),
+        note: String(entry.note || ""),
+        modState: entry.modState && typeof entry.modState === "object" ? entry.modState : {},
+        qty: Math.max(1, Number(entry.qty || 1))
+      }))
+      .filter((entry) => entry.id !== null && entry.id !== undefined);
+  } catch (_) {
+    state.cart = [];
+  }
+}
+
 function renderCart() {
   const { count, total } = getCartTotals();
+  const availabilityMap = getCurrentAvailabilityMap();
+  const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap));
 
   ui.cartTotal.textContent = currency(total);
   ui.cartFabCount.textContent = `${count} ${count === 1 ? "item" : "itens"}`;
   ui.cartFabTotal.textContent = currency(total);
-  ui.checkoutBtn.disabled = count === 0;
+  ui.checkoutBtn.disabled = count === 0 || hasUnavailable;
+  ui.removeUnavailableBtn.hidden = !hasUnavailable;
 
   if (count === 0) {
     ui.cartFab.classList.remove("show");
     ui.cartList.innerHTML = '<div class="cart-empty">Seu carrinho está vazio.</div>';
+    ui.checkoutBtn.textContent = "Finalizar no WhatsApp";
+    ui.removeUnavailableBtn.hidden = true;
+    persistCart();
     return;
   }
 
   ui.cartFab.classList.add("show");
+  ui.checkoutBtn.textContent = hasUnavailable ? "Remova itens indisponíveis" : "Finalizar no WhatsApp";
   ui.cartList.innerHTML = state.cart
     .map((entry, index) => `
-      <article class="cart-item">
+      <article class="cart-item${isCartEntryUnavailable(entry, availabilityMap) ? " unavailable" : ""}">
         <div class="cart-item-top">
           <h4 class="cart-item-title">${escapeHtml(entry.name)}</h4>
           <div class="cart-item-actions">
@@ -80,6 +155,7 @@ function renderCart() {
         </div>
         ${entry.optionsText ? `<p class="item-desc">${escapeHtml(entry.optionsText)}</p>` : ""}
         ${entry.note ? `<p class="cart-item-note"><strong>Observação:</strong> ${escapeHtml(entry.note)}</p>` : ""}
+        ${isCartEntryUnavailable(entry, availabilityMap) ? '<p class="cart-item-warning">Este item ficou indisponível e precisa ser removido do carrinho.</p>' : ""}
         <div class="cart-item-bottom">
           <div class="qty-wrap">
             <button type="button" class="qty-btn" data-cart-delta="-1" data-cart-index="${index}">-</button>
@@ -91,6 +167,24 @@ function renderCart() {
       </article>
     `)
     .join("");
+
+  persistCart();
+}
+
+function removeUnavailableCartItems() {
+  const availabilityMap = getCurrentAvailabilityMap();
+  if (!availabilityMap) {
+    return;
+  }
+
+  const before = state.cart.length;
+  state.cart = state.cart.filter((entry) => !isCartEntryUnavailable(entry, availabilityMap));
+  const removed = before - state.cart.length;
+
+  if (removed > 0) {
+    renderCart();
+    setStatus(`${removed} ${removed === 1 ? "item indisponível removido" : "itens indisponíveis removidos"} do carrinho.`, "ok");
+  }
 }
 
 function addToCart(item, qty, unitPrice = Number(item.price || 0), optionsText = "", signature = "") {
@@ -140,6 +234,7 @@ function removeCartItem(index) {
 
 function openCart() {
   ui.cartBackdrop.classList.add("show");
+  scheduleRefreshFromRealtime();
 }
 
 function closeCart() {
@@ -204,9 +299,18 @@ function openCartEdit(index) {
   openItemModal(item, { editIndex: index });
 }
 
-function checkoutWhatsApp() {
+async function checkoutWhatsApp() {
+  await refreshDataNow({ showError: false });
+
   const { count, total } = getCartTotals();
   if (count === 0) {
+    return;
+  }
+
+  const availabilityMap = getCurrentAvailabilityMap();
+  const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap));
+  if (hasUnavailable) {
+    alert("Existem itens indisponíveis no carrinho. Remova-os para finalizar o pedido.");
     return;
   }
 
@@ -252,6 +356,14 @@ function checkoutWhatsApp() {
 }
 
 function setStatus(text, cls = "") {
+  const hasText = Boolean(String(text || "").trim());
+  ui.status.hidden = !hasText;
+  if (!hasText) {
+    ui.status.className = "status-bar";
+    ui.status.textContent = "";
+    return;
+  }
+
   ui.status.className = "status-bar" + (cls ? ` ${cls}` : "");
   ui.status.textContent = text;
 }
@@ -827,8 +939,43 @@ function renderHeader() {
 
   ui.brandName.textContent = setup.name || "Restaurante";
   ui.brandSchedule.textContent = setup.schedule || "Horário não informado";
-  ui.brandPhone.textContent = setup.phone || "Telefone não informado";
-  ui.brandPix.textContent = setup.pix_key || "Chave PIX não informada";
+
+  const phoneLabel = setup.phone || "Não informado";
+  const whatsappRaw = String(setup.phone || "").replace(/\D/g, "");
+  ui.brandPhone.textContent = phoneLabel;
+  if (whatsappRaw) {
+    ui.brandPhoneLink.href = `https://wa.me/${whatsappRaw}`;
+    ui.brandPhoneLink.removeAttribute("aria-disabled");
+  } else {
+    ui.brandPhoneLink.href = "#";
+    ui.brandPhoneLink.setAttribute("aria-disabled", "true");
+  }
+
+  ui.brandPix.textContent = "Pagar com PIX";
+  const pixLink = String(setup.pix_key || "").trim();
+  const pixIsUrl = /^https?:\/\//i.test(pixLink);
+  if (pixIsUrl) {
+    ui.brandPixLink.href = pixLink;
+    ui.brandPixLink.removeAttribute("aria-disabled");
+  } else {
+    ui.brandPixLink.href = "#";
+    ui.brandPixLink.setAttribute("aria-disabled", "true");
+  }
+
+  const storeInfoText = String(setup.public_info_text || "").trim();
+  const infoMode = String(setup.public_info_mode || "basic").trim().toLowerCase();
+  if (storeInfoText) {
+    if (infoMode === "html") {
+      // Conteudo HTML vem do setup e e considerado confiavel (entrada do administrador).
+      ui.storeInfoText.innerHTML = storeInfoText;
+    } else {
+      ui.storeInfoText.textContent = storeInfoText;
+    }
+    ui.storeInfo.hidden = false;
+  } else {
+    ui.storeInfoText.textContent = "";
+    ui.storeInfo.hidden = true;
+  }
 
   ui.brandLogo.src = FIXED_BRAND_LOGO;
 }
@@ -1274,11 +1421,89 @@ function bindEvents() {
   });
 
   ui.checkoutBtn.addEventListener("click", checkoutWhatsApp);
+  ui.removeUnavailableBtn.addEventListener("click", removeUnavailableCartItems);
+}
+
+async function refreshDataNow(options = {}) {
+  const { showError = true } = options;
+
+  if (state.refreshInFlight) {
+    return false;
+  }
+
+  state.refreshInFlight = true;
+  try {
+    await loadData();
+    renderHeader();
+    renderMenu();
+    renderCart();
+    return true;
+  } catch (error) {
+    if (showError) {
+      setStatus("Nao foi possivel atualizar o cardapio agora.", "err");
+    }
+    return false;
+  } finally {
+    state.refreshInFlight = false;
+  }
+}
+
+function scheduleRefreshFromRealtime() {
+  if (state.refreshTimer) {
+    clearTimeout(state.refreshTimer);
+    state.refreshTimer = null;
+  }
+
+  state.refreshTimer = setTimeout(async () => {
+    await refreshDataNow({ showError: false });
+    state.refreshTimer = null;
+  }, 250);
+}
+
+function startAvailabilityPolling() {
+  if (state.pollingTimer) {
+    clearInterval(state.pollingTimer);
+    state.pollingTimer = null;
+  }
+
+  // Fallback para manter disponibilidade atualizada mesmo sem realtime.
+  state.pollingTimer = setInterval(() => {
+    scheduleRefreshFromRealtime();
+  }, 5000);
+}
+
+function bindRealtime() {
+  if (state.realtimeChannel) {
+    return;
+  }
+
+  const tables = [
+    "setup",
+    "node_category",
+    "items",
+    "composition",
+    "item_composition_association",
+    "item_group",
+    "item_group_association"
+  ];
+
+  const channel = db.channel("menu-live-sync");
+  tables.forEach((table) => {
+    channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
+      scheduleRefreshFromRealtime();
+    });
+  });
+
+  channel.subscribe((status) => {
+    if (status === "SUBSCRIBED") {
+      setStatus("");
+    }
+  });
+
+  state.realtimeChannel = channel;
 }
 
 async function loadData() {
-  setStatus("Carregando dados do cardápio...");
-
   const [
     setupRes,
     categoryRes,
@@ -1327,6 +1552,7 @@ async function loadData() {
 async function init() {
   bindViewportMetrics();
   bindEvents();
+  restoreCart();
   renderCart();
 
   try {
@@ -1334,9 +1560,12 @@ async function init() {
     renderHeader();
     setupHeaderLogoScale();
     renderMenu();
-    setStatus("Cardápio carregado com sucesso.", "ok");
+    renderCart();
+    bindRealtime();
+    startAvailabilityPolling();
+    setStatus("");
   } catch (error) {
-    setStatus(`Erro ao carregar: ${error.message}`, "err");
+    setStatus("Nao foi possivel carregar o cardapio.", "err");
     ui.menu.innerHTML = '<div class="empty">Não foi possível carregar os dados.</div>';
   }
 }
