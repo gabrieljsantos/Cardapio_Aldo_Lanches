@@ -1046,6 +1046,7 @@ img {
   text-align: left;
   display: none;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .cart-fab.show {
@@ -1249,6 +1250,7 @@ body.modal-open {
   padding: 11px;
   font-weight: 700;
   cursor: pointer;
+  touch-action: manipulation;
   transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -1268,6 +1270,45 @@ body.modal-open {
   border: 1px dashed var(--line);
   border-radius: 12px;
   padding: 20px 10px;
+}
+
+.creditos-dev {
+  margin: 2em auto 1em;
+  padding: 0 14px;
+  text-align: center;
+  color: #526947;
+}
+
+.creditos-dev-line {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.creditos-dev-links {
+  margin-top: 8px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.creditos-dev-links a {
+  color: #526947;
+  font-size: 0.92rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.creditos-dev-links a:hover {
+  color: #3f5236;
+}
+
+.creditos-dev-links a:focus-visible {
+  outline: 2px solid rgba(82, 105, 71, 0.35);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 @media (max-width: 700px) {
@@ -1419,6 +1460,24 @@ body.modal-open {
 
   .comp-table {
     min-width: 480px;
+  }
+
+  .creditos-dev {
+    margin-top: 1.6em;
+    margin-bottom: 0.9em;
+    padding: 0 10px;
+  }
+
+  .creditos-dev-line {
+    font-size: 0.9rem;
+  }
+
+  .creditos-dev-links {
+    gap: 6px 12px;
+  }
+
+  .creditos-dev-links a {
+    font-size: 0.86rem;
   }
 }
 

@@ -300,22 +300,41 @@ function openCartEdit(index) {
 }
 
 async function checkoutWhatsApp() {
+  // iOS/Safari pode bloquear abertura de nova aba se ocorrer apos await.
+  // Abrimos uma janela placeholder no gesto do clique e depois navegamos nela.
+  const pendingWindow = window.open("", "_blank", "noopener");
+  const shouldOpenInSameTab = !pendingWindow;
+
+  const closePendingWindow = () => {
+    if (!pendingWindow || pendingWindow.closed) {
+      return;
+    }
+    try {
+      pendingWindow.close();
+    } catch (_) {
+      // Ignora falhas ao tentar fechar a janela placeholder.
+    }
+  };
+
   await refreshDataNow({ showError: false });
 
   const { count, total } = getCartTotals();
   if (count === 0) {
+    closePendingWindow();
     return;
   }
 
   const availabilityMap = getCurrentAvailabilityMap();
   const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap));
   if (hasUnavailable) {
+    closePendingWindow();
     alert("Existem itens indisponíveis no carrinho. Remova-os para finalizar o pedido.");
     return;
   }
 
   const phoneRaw = String(state.setup?.phone || "").replace(/\D/g, "");
   if (!phoneRaw) {
+    closePendingWindow();
     alert("Telefone do restaurante não configurado para finalizar.");
     return;
   }
@@ -352,7 +371,19 @@ async function checkoutWhatsApp() {
   lines.push(sep, `Total: ${currency(total)}`, sep);
 
   const text = encodeURIComponent(lines.join("\n"));
-  window.open(`https://wa.me/${phoneRaw}?text=${text}`, "_blank");
+  const url = `https://wa.me/${phoneRaw}?text=${text}`;
+
+  if (pendingWindow && !pendingWindow.closed) {
+    pendingWindow.location.href = url;
+    return;
+  }
+
+  if (shouldOpenInSameTab) {
+    window.location.href = url;
+    return;
+  }
+
+  window.open(url, "_blank");
 }
 
 function setStatus(text, cls = "") {
@@ -1401,6 +1432,9 @@ function closeModal() {
 }
 
 function bindEvents() {
+  let suppressNextCartFabClick = false;
+  let suppressNextCheckoutClick = false;
+
   ui.searchInput.addEventListener("input", (event) => {
     state.searchTerm = event.target.value;
     applySearch();
@@ -1412,7 +1446,20 @@ function bindEvents() {
     }
   });
 
-  ui.cartFab.addEventListener("click", openCart);
+  ui.cartFab.addEventListener("touchend", (event) => {
+    event.preventDefault();
+    suppressNextCartFabClick = true;
+    openCart();
+  }, { passive: false });
+
+  ui.cartFab.addEventListener("click", () => {
+    if (suppressNextCartFabClick) {
+      suppressNextCartFabClick = false;
+      return;
+    }
+    openCart();
+  });
+
   ui.closeCartBtn.addEventListener("click", closeCart);
   ui.cartBackdrop.addEventListener("click", (event) => {
     if (event.target === ui.cartBackdrop) {
@@ -1440,7 +1487,20 @@ function bindEvents() {
     }
   });
 
-  ui.checkoutBtn.addEventListener("click", checkoutWhatsApp);
+  ui.checkoutBtn.addEventListener("touchend", (event) => {
+    event.preventDefault();
+    suppressNextCheckoutClick = true;
+    checkoutWhatsApp();
+  }, { passive: false });
+
+  ui.checkoutBtn.addEventListener("click", () => {
+    if (suppressNextCheckoutClick) {
+      suppressNextCheckoutClick = false;
+      return;
+    }
+    checkoutWhatsApp();
+  });
+
   ui.removeUnavailableBtn.addEventListener("click", removeUnavailableCartItems);
 }
 
