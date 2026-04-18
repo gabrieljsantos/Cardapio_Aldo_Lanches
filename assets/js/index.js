@@ -714,14 +714,17 @@ function createItemCard(item, mode) {
   return div;
 }
 
-function renderCategoryNav(roots) {
+function renderCategoryNav(roots, options = {}) {
+  const { animateIntro = false } = options;
   ui.catNav.innerHTML = "";
 
   roots.forEach((root, index) => {
     const btn = document.createElement("button");
     btn.className = `cat-btn${index === 0 ? " active" : ""}`;
-    btn.classList.add("nav-reveal");
-    btn.style.setProperty("--nav-index", String(index));
+    if (animateIntro) {
+      btn.classList.add("nav-reveal");
+      btn.style.setProperty("--nav-index", String(index));
+    }
     btn.textContent = root.name;
 
     btn.addEventListener("click", () => {
@@ -734,7 +737,9 @@ function renderCategoryNav(roots) {
   });
 }
 
-function setupMenuReveal() {
+function setupMenuReveal(options = {}) {
+  const { animateIntro = false } = options;
+
   if (state.revealObserver) {
     state.revealObserver.disconnect();
     state.revealObserver = null;
@@ -748,15 +753,23 @@ function setupMenuReveal() {
     return;
   }
 
+  const cards = [...ui.menu.querySelectorAll(".item-card")];
+  cards.forEach((card, index) => {
+    card.style.setProperty("--float-index", String(index % 10));
+  });
+
+  if (!animateIntro) {
+    targets.forEach((el) => {
+      el.classList.remove("reveal-item", "reveal-in", "visible-react");
+      el.style.removeProperty("--reveal-index");
+    });
+    return;
+  }
+
   targets.forEach((el, index) => {
     el.classList.add("reveal-item");
     el.classList.remove("reveal-in");
     el.style.setProperty("--reveal-index", String(index % 12));
-  });
-
-  const cards = [...ui.menu.querySelectorAll(".item-card")];
-  cards.forEach((card, index) => {
-    card.style.setProperty("--float-index", String(index % 10));
   });
 
   if (!("IntersectionObserver" in window)) {
@@ -898,7 +911,8 @@ function renderBranch(category, children, itemsByCategory, depth = 0, trail = []
   return section;
 }
 
-function renderMenu() {
+function renderMenu(options = {}) {
+  const { animateIntro = false } = options;
   const visibleItems = getVisibleItems(state.items, state.groups, state.groupAssociations);
   const { roots, children } = buildCategoryTree(state.categories);
 
@@ -926,11 +940,17 @@ function renderMenu() {
     ui.menu.innerHTML = '<div class="empty">Nenhum item disponível no momento.</div>';
   }
 
-  renderCategoryNav(roots.filter((root) => document.getElementById(`cat-${root.id}`)));
+  renderCategoryNav(roots.filter((root) => document.getElementById(`cat-${root.id}`)), { animateIntro });
   applySearch();
   startPhotoRotation();
-  setupMenuReveal();
-  scheduleVisibleReactLoop();
+  setupMenuReveal({ animateIntro });
+
+  if (animateIntro) {
+    scheduleVisibleReactLoop();
+  } else if (state.visibleReactTimer) {
+    clearTimeout(state.visibleReactTimer);
+    state.visibleReactTimer = null;
+  }
 }
 
 function renderHeader() {
@@ -1435,7 +1455,7 @@ async function refreshDataNow(options = {}) {
   try {
     await loadData();
     renderHeader();
-    renderMenu();
+    renderMenu({ animateIntro: false });
     renderCart();
     return true;
   } catch (error) {
@@ -1559,7 +1579,7 @@ async function init() {
     await loadData();
     renderHeader();
     setupHeaderLogoScale();
-    renderMenu();
+    renderMenu({ animateIntro: true });
     renderCart();
     bindRealtime();
     startAvailabilityPolling();
