@@ -121,6 +121,27 @@ function restoreCart() {
   }
 }
 
+
+function savePhotoState() {
+  const map = new Map();
+  document.querySelectorAll(".item-photo.rotating-photo[data-item-id]").forEach((img) => {
+    map.set(img.dataset.itemId, Number(img.dataset.currentIndex || 0));
+  });
+  return map;
+}
+
+function restorePhotoState(savedMap) {
+  if (!savedMap || !savedMap.size) return;
+  document.querySelectorAll(".item-photo.rotating-photo[data-item-id]").forEach((img) => {
+    const saved = savedMap.get(img.dataset.itemId);
+    if (saved == null) return;
+    const photos = JSON.parse(img.dataset.photos || "[]");
+    const index = saved < photos.length ? saved : 0;
+    img.src = photos[index];
+    img.dataset.currentIndex = String(index);
+  });
+}
+
 function renderCart() {
   const { count, total } = getCartTotals();
   const availabilityMap = getCurrentAvailabilityMap();
@@ -552,7 +573,8 @@ function getItemPhotos(item) {
     .map((url) => String(url || "").trim())
     .filter((url) => isValidImageUrl(url));
 
-  return [...new Set(ordered)];
+  // Remove duplicatas e limita a 3
+  return [...new Set(ordered)].slice(0, 3);
 }
 
 function rotateCardPhotos() {
@@ -564,15 +586,8 @@ function rotateCardPhotos() {
       return;
     }
 
-    let nextIndex = 0;
-    if (Math.random() > 0.8) {
-      nextIndex = Math.floor(Math.random() * (options.length - 1)) + 1;
-    }
-
     const currentIndex = Number(img.dataset.currentIndex || 0);
-    if (nextIndex === currentIndex) {
-      return;
-    }
+    const nextIndex = (currentIndex + 1) % options.length;
 
     img.classList.add("fade-switch");
     setTimeout(() => {
@@ -584,17 +599,23 @@ function rotateCardPhotos() {
 }
 
 function startPhotoRotation() {
-  if (state.photoRotationTimer) {
-    clearInterval(state.photoRotationTimer);
-    state.photoRotationTimer = null;
-  }
-
   const hasRotating = document.querySelector(".item-photo.rotating-photo[data-photos]");
+
+  // Se não tem fotos rotativas, limpa e sai
   if (!hasRotating) {
+    if (state.photoRotationTimer) {
+      clearInterval(state.photoRotationTimer);
+      state.photoRotationTimer = null;
+    }
     return;
   }
 
-  state.photoRotationTimer = setInterval(rotateCardPhotos, 7000);
+  // Se já tem timer rodando, não reinicia
+  if (state.photoRotationTimer) {
+    return;
+  }
+
+  state.photoRotationTimer = setInterval(rotateCardPhotos, 10000);
 }
 
 function buildCategoryTree(categories) {
@@ -740,6 +761,7 @@ function createItemCard(item, mode) {
     img.classList.add("rotating-photo");
     img.dataset.photos = JSON.stringify(photos);
     img.dataset.currentIndex = "0";
+    img.dataset.itemId = String(item.id);
   }
 
   return div;
@@ -956,13 +978,14 @@ function renderMenu(options = {}) {
     itemsByCategory.get(key).push(item);
   });
 
+  // ✅ Salvar estado das fotos antes de reconstruir
+  const photoState = savePhotoState();
+
   ui.menu.innerHTML = "";
 
   roots.forEach((root) => {
     const rootNode = renderBranch(root, children, itemsByCategory, 0);
-    if (!rootNode) {
-      return;
-    }
+    if (!rootNode) return;
     rootNode.id = `cat-${root.id}`;
     ui.menu.appendChild(rootNode);
   });
@@ -973,6 +996,10 @@ function renderMenu(options = {}) {
 
   renderCategoryNav(roots.filter((root) => document.getElementById(`cat-${root.id}`)), { animateIntro });
   applySearch();
+
+  // ✅ Restaurar estado das fotos depois de reconstruir
+  restorePhotoState(photoState);
+
   startPhotoRotation();
   setupMenuReveal({ animateIntro });
 
