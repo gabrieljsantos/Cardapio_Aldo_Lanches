@@ -366,7 +366,7 @@ img {
 
 .item-card {
   display: grid;
-  grid-template-columns: 92px 1fr;
+  grid-template-columns: 138px 1fr;
   gap: 12px;
   background: #fff;
   border: 1px solid var(--line);
@@ -374,7 +374,7 @@ img {
   padding: 10px;
   cursor: pointer;
   transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-  min-height: 112px;
+  height: fit-content;
   position: relative;
   overflow: hidden;
 }
@@ -567,12 +567,12 @@ img {
 .item-photo {
   width: 100%;
   aspect-ratio: 1 / 1;
-  height: auto;
   object-fit: cover;
   border-radius: 12px;
   background: var(--surface-soft);
   border: 1px solid var(--line);
   transition: opacity 0.35s ease, filter 0.22s ease;
+  align-self: center;
 }
 
 .item-card:hover .item-photo {
@@ -1342,7 +1342,7 @@ body.modal-open {
   }
 
   .item-card {
-    grid-template-columns: 78px 1fr;
+    grid-template-columns: 117px 1fr;
     padding: 9px;
     gap: 9px;
   }
@@ -1431,7 +1431,7 @@ body.modal-open {
   }
 
   .item-card {
-    grid-template-columns: 72px 1fr;
+    grid-template-columns: 108px 1fr;
   }
 
   .item-name {
