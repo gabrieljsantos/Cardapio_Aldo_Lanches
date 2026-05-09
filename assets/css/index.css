@@ -1240,6 +1240,23 @@ body.modal-open {
   margin-bottom: 10px;
 }
 
+.copy-message-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.copy-message-row #copyMessageBtn {
+  white-space: nowrap;
+}
+
+.copy-message-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
 .checkout-btn {
   width: 100%;
   border: none;

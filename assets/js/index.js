@@ -54,6 +54,7 @@ const ui = {
   cartFabTotal: document.getElementById("cartFabTotal"),
   closeCartBtn: document.getElementById("closeCartBtn"),
   removeUnavailableBtn: document.getElementById("removeUnavailableBtn"),
+  copyMessageBtn: document.getElementById("copyMessageBtn"),
   checkoutBtn: document.getElementById("checkoutBtn")
 };
 
@@ -320,47 +321,19 @@ function openCartEdit(index) {
   openItemModal(item, { editIndex: index });
 }
 
-async function checkoutWhatsApp() {
-  // iOS/Safari pode bloquear abertura de nova aba se ocorrer apos await.
-  // Abrimos uma janela placeholder no gesto do clique e depois navegamos nela.
-  const pendingWindow = window.open("", "_blank", "noopener");
-  const shouldOpenInSameTab = !pendingWindow;
-
-  const closePendingWindow = () => {
-    if (!pendingWindow || pendingWindow.closed) {
-      return;
-    }
-    try {
-      pendingWindow.close();
-    } catch (_) {
-      // Ignora falhas ao tentar fechar a janela placeholder.
-    }
-  };
-
-  await refreshDataNow({ showError: false });
-
+function buildOrderMessage() {
   const { count, total } = getCartTotals();
   if (count === 0) {
-    closePendingWindow();
-    return;
+    return null;
   }
 
   const availabilityMap = getCurrentAvailabilityMap();
   const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap));
   if (hasUnavailable) {
-    closePendingWindow();
-    alert("Existem itens indisponíveis no carrinho. Remova-os para finalizar o pedido.");
-    return;
+    return null;
   }
 
-  const phoneRaw = String(state.setup?.phone || "").replace(/\D/g, "");
-  if (!phoneRaw) {
-    closePendingWindow();
-    alert("Telefone do restaurante não configurado para finalizar.");
-    return;
-  }
-
-  const sep = "_______________________________________";
+  const sep = "_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _";
   const lines = [sep, `Pedido - ${state.setup?.name || "Restaurante"}`, sep];
 
   state.cart.forEach((entry) => {
@@ -391,20 +364,108 @@ async function checkoutWhatsApp() {
 
   lines.push(sep, `Total: ${currency(total)}`, sep);
 
-  const text = encodeURIComponent(lines.join("\n"));
+  return lines.join("\n");
+}
+
+function copyOrderMessage() {
+  const message = buildOrderMessage();
+  if (!message) {
+    alert("Carrinho vazio ou com itens indisponíveis.");
+    return;
+  }
+
+  navigator.clipboard.writeText(message).then(() => {
+    ui.copyMessageBtn.textContent = "Mensagem copiada!";
+    setTimeout(() => {
+      ui.copyMessageBtn.textContent = "Copiar mensagem";
+    }, 2000);
+  }).catch(() => {
+    alert("Erro ao copiar mensagem. Tente novamente.");
+  });
+}
+
+async function checkoutWhatsApp() {
+  // iOS/Safari pode bloquear abertura de nova aba se ocorrer apos await.
+  // Abrimos uma janela placeholder no gesto do clique e depois navegamos nela.
+  let pendingWindow = null;
+  let shouldOpenInSameTab = false;
+  
+  try {
+    pendingWindow = window.open("", "_blank", "noopener");
+    shouldOpenInSameTab = !pendingWindow;
+  } catch (_) {
+    shouldOpenInSameTab = true;
+  }
+
+  const closePendingWindow = () => {
+    if (!pendingWindow || pendingWindow.closed) {
+      return;
+    }
+    try {
+      pendingWindow.close();
+    } catch (_) {
+      // Ignora falhas ao tentar fechar a janela placeholder.
+    }
+  };
+
+  try {
+    await refreshDataNow({ showError: false });
+  } catch (_) {
+    // Continua mesmo se o refresh falhar
+  }
+
+  const message = buildOrderMessage();
+  if (!message) {
+    closePendingWindow();
+    const { count, total } = getCartTotals();
+    if (count === 0) {
+      return;
+    }
+    const availabilityMap = getCurrentAvailabilityMap();
+    const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap));
+    if (hasUnavailable) {
+      alert("Existem itens indisponíveis no carrinho. Remova-os para finalizar o pedido.");
+    }
+    return;
+  }
+
+  const phoneRaw = String(state.setup?.phone || "").replace(/\D/g, "");
+  if (!phoneRaw) {
+    closePendingWindow();
+    alert("Telefone do restaurante não configurado para finalizar.");
+    return;
+  }
+
+  const text = encodeURIComponent(message);
   const url = `https://wa.me/${phoneRaw}?text=${text}`;
 
+  // Tenta navegar na janela aberta, se existir
   if (pendingWindow && !pendingWindow.closed) {
-    pendingWindow.location.href = url;
-    return;
+    try {
+      pendingWindow.location.href = url;
+      return;
+    } catch (_) {
+      // Se falhar, cai para fallback
+    }
   }
 
+  // Se não abriu janela, abre na mesma aba
   if (shouldOpenInSameTab) {
-    window.location.href = url;
+    try {
+      window.location.href = url;
+    } catch (_) {
+      window.open(url, "_blank");
+    }
     return;
   }
 
-  window.open(url, "_blank");
+  // Último fallback: abre em nova aba
+  try {
+    window.open(url, "_blank");
+  } catch (_) {
+    // Se tudo falhar, tenta navegação direta
+    window.location.href = url;
+  }
 }
 
 function setStatus(text, cls = "") {
@@ -1527,6 +1588,8 @@ function bindEvents() {
     }
     checkoutWhatsApp();
   });
+
+  ui.copyMessageBtn.addEventListener("click", copyOrderMessage);
 
   ui.removeUnavailableBtn.addEventListener("click", removeUnavailableCartItems);
 }
