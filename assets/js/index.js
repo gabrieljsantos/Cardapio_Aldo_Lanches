@@ -385,29 +385,6 @@ function copyOrderMessage() {
 }
 
 async function checkoutWhatsApp() {
-  // iOS/Safari pode bloquear abertura de nova aba se ocorrer apos await.
-  // Abrimos uma janela placeholder no gesto do clique e depois navegamos nela.
-  let pendingWindow = null;
-  let shouldOpenInSameTab = false;
-  
-  try {
-    pendingWindow = window.open("", "_blank", "noopener");
-    shouldOpenInSameTab = !pendingWindow;
-  } catch (_) {
-    shouldOpenInSameTab = true;
-  }
-
-  const closePendingWindow = () => {
-    if (!pendingWindow || pendingWindow.closed) {
-      return;
-    }
-    try {
-      pendingWindow.close();
-    } catch (_) {
-      // Ignora falhas ao tentar fechar a janela placeholder.
-    }
-  };
-
   try {
     await refreshDataNow({ showError: false });
   } catch (_) {
@@ -416,7 +393,6 @@ async function checkoutWhatsApp() {
 
   const message = buildOrderMessage();
   if (!message) {
-    closePendingWindow();
     const { count, total } = getCartTotals();
     if (count === 0) {
       return;
@@ -431,7 +407,6 @@ async function checkoutWhatsApp() {
 
   const phoneRaw = String(state.setup?.phone || "").replace(/\D/g, "");
   if (!phoneRaw) {
-    closePendingWindow();
     alert("Telefone do restaurante não configurado para finalizar.");
     return;
   }
@@ -439,31 +414,11 @@ async function checkoutWhatsApp() {
   const text = encodeURIComponent(message);
   const url = `https://wa.me/${phoneRaw}?text=${text}`;
 
-  // Tenta navegar na janela aberta, se existir
-  if (pendingWindow && !pendingWindow.closed) {
-    try {
-      pendingWindow.location.href = url;
-      return;
-    } catch (_) {
-      // Se falhar, cai para fallback
-    }
-  }
-
-  // Se não abriu janela, abre na mesma aba
-  if (shouldOpenInSameTab) {
-    try {
-      window.location.href = url;
-    } catch (_) {
-      window.open(url, "_blank");
-    }
-    return;
-  }
-
-  // Último fallback: abre em nova aba
-  try {
-    window.open(url, "_blank");
-  } catch (_) {
-    // Se tudo falhar, tenta navegação direta
+  // Tenta abrir em nova aba
+  const newWindow = window.open(url, "_blank");
+  
+  // Se não conseguiu abrir em nova aba (popup bloqueado), navega na mesma aba
+  if (!newWindow) {
     window.location.href = url;
   }
 }
@@ -1592,6 +1547,21 @@ function bindEvents() {
   ui.copyMessageBtn.addEventListener("click", copyOrderMessage);
 
   ui.removeUnavailableBtn.addEventListener("click", removeUnavailableCartItems);
+
+  // Previne clique em links desabilitados (evita abrir about:blank)
+  ui.brandPhoneLink.addEventListener("click", (event) => {
+    if (ui.brandPhoneLink.getAttribute("aria-disabled") === "true") {
+      event.preventDefault();
+      return false;
+    }
+  });
+
+  ui.brandPixLink.addEventListener("click", (event) => {
+    if (ui.brandPixLink.getAttribute("aria-disabled") === "true") {
+      event.preventDefault();
+      return false;
+    }
+  });
 }
 
 async function refreshDataNow(options = {}) {
