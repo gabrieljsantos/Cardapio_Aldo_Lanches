@@ -731,7 +731,19 @@ function buildSearchCompositionText(itemId) {
 }
 
 function createItemCard(item, mode) {
-  const isInert = Number(item.__effectiveStock ?? item.stock ?? 0) === 0;
+  const stock = Number(item.__effectiveStock ?? item.stock ?? 0);
+  const isInert = stock === 0;
+  const isLowStock = stock > 0 && stock < 10;
+  
+  let badgeText = "";
+  if (stock === 1) {
+    badgeText = "Última unidade";
+  } else if (stock > 1 && stock < 5) {
+    badgeText = `Restam apenas ${stock} unidades`;
+  } else if (stock >= 5 && stock < 10) {
+    badgeText = "Quase acabando";
+  }
+  
   const photos = getItemPhotos(item);
   const photo = safeImageUrl(photos[0] || "");
   const hasPhoto = Boolean(photo);
@@ -745,7 +757,7 @@ function createItemCard(item, mode) {
     ? `${safeDescription} <span class="item-comp-inline">${safeCompositionInline}</span>`
     : (description ? safeDescription : (compositionInline ? `<span class="item-comp-inline">${safeCompositionInline}</span>` : ""));
   const div = document.createElement("article");
-  div.className = `item-card${isInert ? " inert" : ""}${hasPhoto ? "" : " no-photo"}`;
+  div.className = `item-card${isInert ? " inert" : ""}${hasPhoto ? "" : " no-photo"}${isLowStock ? " low-stock" : ""}`;
   div.dataset.search = normalize(`${item.name} ${description} ${compositionInline} ${compositionForSearch}`);
 
   const photoMarkup = hasPhoto
@@ -756,6 +768,7 @@ function createItemCard(item, mode) {
     ${photoMarkup}
     <div>
       <h4 class="item-name">${safeName}</h4>
+      ${isLowStock && badgeText ? `<div class="low-stock-badge">${badgeText}</div>` : ""}
       ${descWithComp ? `<p class="item-desc">${descWithComp}</p>` : ""}
       <div class="item-bottom">
         <span class="item-price">${currency(item.price)}</span>
