@@ -66,7 +66,7 @@
     .toolbar {
       display: grid;
       gap: 10px;
-      grid-template-columns: repeat(7, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       align-items: center;
     }
 
@@ -328,58 +328,15 @@
       color: var(--brand);
     }
 
-    .stock-controls {
-      display: grid;
-      grid-template-columns: 48px 38px minmax(68px, 1fr) 38px 48px;
-      gap: 6px;
-      align-items: center;
-      width: 100%;
-    }
-
     .stock {
       width: 100%;
-      min-width: 0;
       min-height: 38px;
       border-radius: 11px;
       border: 1px solid var(--line);
-      padding: 0 8px;
+      padding: 0 10px;
       font: inherit;
       text-align: center;
       background: #fff;
-      appearance: textfield;
-      -moz-appearance: textfield;
-    }
-
-    .stock::-webkit-outer-spin-button,
-    .stock::-webkit-inner-spin-button {
-      margin: 0;
-      -webkit-appearance: none;
-    }
-
-    .stock-step {
-      min-height: 38px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      background: #fff;
-      color: var(--ink);
-      font: 700 0.82rem/1 "Instrument Sans", sans-serif;
-      cursor: pointer;
-      transition: transform 0.14s ease, background 0.14s ease, box-shadow 0.14s ease;
-    }
-
-    .stock-step:hover {
-      background: #f8f1e7;
-      box-shadow: 0 4px 10px rgba(15, 29, 43, 0.1);
-      transform: translateY(-1px);
-    }
-
-    .stock-step:active {
-      transform: translateY(0);
-    }
-
-    .stock-step:focus-visible {
-      outline: 3px solid rgba(11, 93, 107, 0.25);
-      outline-offset: 1px;
     }
 
     .payload-wrap {
@@ -437,8 +394,7 @@
       .row .cell-finished { grid-area: finished; }
       .row .cell-stock { grid-area: stock; }
 
-      .stock,
-      .stock-step {
+      .stock {
         min-height: 42px;
       }
     }
@@ -508,11 +464,7 @@
       }
 
       .cell-stock {
-        width: 100%;
-      }
-
-      .stock-controls {
-        grid-template-columns: 44px 38px minmax(64px, 1fr) 38px 44px;
+        width: min(180px, 100%);
       }
 
       .payload-wrap {
@@ -595,13 +547,6 @@
 
       <div class="toolbar">
         <input id="searchInput" type="search" placeholder="Buscar por id ou nome">
-        <select id="stateFilter" title="Filtrar itens por estado">
-          <option value="all" selected>Todos os estados</option>
-          <option value="visible">Visiveis</option>
-          <option value="hidden">Ocultos</option>
-          <option value="finished">Finalizados</option>
-          <option value="changed">Alterados</option>
-        </select>
         <select id="identifierMode" title="Identificador do payload">
           <option value="id" selected>Payload por ID</option>
           <option value="name">Payload por Nome</option>
@@ -651,13 +596,11 @@
       categories: [],
       items: [],
       grouped: [],
-      search: "",
-      stateFilter: "all"
+      search: ""
     };
 
     const ui = {
       searchInput: document.getElementById("searchInput"),
-      stateFilter: document.getElementById("stateFilter"),
       identifierMode: document.getElementById("identifierMode"),
       payloadScope: document.getElementById("payloadScope"),
       loadBtn: document.getElementById("loadBtn"),
@@ -774,39 +717,8 @@
 
     function rowMatches(row) {
       const term = normalize(state.search);
-      const matchesSearch = !term
-        || normalize(row.item.id).includes(term)
-        || normalize(row.item.name).includes(term);
-
-      if (!matchesSearch) return false;
-
-      switch (state.stateFilter) {
-        case "visible":
-          return !row.hidden && !row.finished;
-        case "hidden":
-          return row.hidden;
-        case "finished":
-          return !row.hidden && row.finished;
-        case "changed":
-          return isRowChanged(row);
-        default:
-          return true;
-      }
-    }
-
-    function refreshAfterEdit() {
-      updateMetrics();
-      if (state.stateFilter !== "all") render();
-    }
-
-    function applyStockDelta(row, stockInput, delta) {
-      const typedValue = Number(stockInput.value);
-      const currentValue = Number.isFinite(typedValue) ? Math.trunc(typedValue) : 0;
-      const naturalBase = Math.max(0, currentValue);
-
-      row.stock = Math.max(0, naturalBase + delta);
-      stockInput.value = String(row.stock);
-      refreshAfterEdit();
+      if (!term) return true;
+      return normalize(row.item.id).includes(term) || normalize(row.item.name).includes(term);
     }
 
     function render() {
@@ -877,7 +789,7 @@
             }
             hiddenText.textContent = hiddenStateLabel(row.hidden);
             article.classList.toggle("hidden", row.hidden);
-            refreshAfterEdit();
+            updateMetrics();
           });
           hiddenCell.append(hiddenInput, hiddenTrack, hiddenText);
 
@@ -906,46 +818,23 @@
             }
             finishedText.textContent = finishedStateLabel(row.finished);
             article.classList.toggle("hidden", row.hidden);
-            refreshAfterEdit();
+            updateMetrics();
           });
           finishedCell.append(finishedInput, finishedTrack, finishedText);
 
           const stockCell = document.createElement("div");
           stockCell.className = "cell-stock";
-
-          const stockControls = document.createElement("div");
-          stockControls.className = "stock-controls";
-
           const stockInput = document.createElement("input");
           stockInput.className = "stock";
           stockInput.type = "number";
           stockInput.step = "1";
           stockInput.value = String(Number.isFinite(row.stock) ? row.stock : 0);
-          stockInput.setAttribute("aria-label", `Estoque de ${row.item.name || row.item.id || "item"}`);
           stockInput.addEventListener("change", () => {
             const n = Number(stockInput.value);
             row.stock = Number.isFinite(n) ? Math.trunc(n) : 0;
             stockInput.value = String(row.stock);
-            refreshAfterEdit();
           });
-
-          const createStockButton = (label, delta) => {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "stock-step";
-            button.textContent = label;
-            button.setAttribute("aria-label", `${label} no estoque de ${row.item.name || row.item.id || "item"}`);
-            button.addEventListener("click", () => applyStockDelta(row, stockInput, delta));
-            return button;
-          };
-
-          const minusTenBtn = createStockButton("-10", -10);
-          const minusOneBtn = createStockButton("-", -1);
-          const plusOneBtn = createStockButton("+", 1);
-          const plusTenBtn = createStockButton("+10", 10);
-
-          stockControls.append(minusTenBtn, minusOneBtn, stockInput, plusOneBtn, plusTenBtn);
-          stockCell.appendChild(stockControls);
+          stockCell.appendChild(stockInput);
 
           article.append(photoCell, idCell, nameCell, hiddenCell, finishedCell, stockCell);
           rowsWrap.appendChild(article);
@@ -1091,11 +980,6 @@
 
     ui.searchInput.addEventListener("input", (event) => {
       state.search = event.target.value || "";
-      render();
-    });
-
-    ui.stateFilter.addEventListener("change", (event) => {
-      state.stateFilter = event.target.value || "all";
       render();
     });
 
