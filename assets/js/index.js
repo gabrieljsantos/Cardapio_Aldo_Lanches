@@ -3,6 +3,16 @@ const { createClient } = supabase;
 const SUPABASE_URL = "https://bbrpnbetwwnwpwogjjrv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_IaoUthm5d9UzZCLsQYP2pg_VhsLIl7J";
 const CART_STORAGE_KEY = "smart-store-hub-cart-v1";
+const APP_CHECKOUT_INTENT_KEY = "smart-store-hub-app-checkout-intent";
+const APP_CHECKOUT_SNAPSHOT_KEY = "smart-store-hub-app-checkout-snapshot-v1";
+let checkoutResumeInFlight = false;
+const ORDER_STAGES = [
+  { key: "received", label: "Pedido feito" },
+  { key: "confirmed", label: "Pedido confirmado" },
+  { key: "production", label: "Em preparação" },
+  { key: "delivery", label: "Saiu para entrega" },
+  { key: "delivered", label: "Entregue" }
+];
 
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 const FIXED_BRAND_LOGO = "assets/Aldo%20Lanches%20logo.jpg";
@@ -29,7 +39,10 @@ const state = {
   pollingTimer: null,
   user: null,
   profile: null,
-  authReady: false
+  authReady: false,
+  customerOrders: [],
+  selectedCustomerOrderId: null,
+  customerOrdersPollingTimer: null
 };
 
 const ui = {
@@ -61,12 +74,26 @@ const ui = {
   appCheckoutBtn: document.getElementById("appCheckoutBtn"),
   checkoutBtn: document.getElementById("checkoutBtn"),
   accountBtn: document.getElementById("accountBtn"),
+  myOrdersBtn: document.getElementById("myOrdersBtn"),
   accountBackdrop: document.getElementById("accountBackdrop"),
   closeAccountBtn: document.getElementById("closeAccountBtn"),
   accountEmail: document.getElementById("accountEmail"),
   profileForm: document.getElementById("profileForm"),
   saveProfileBtn: document.getElementById("saveProfileBtn"),
-  signOutBtn: document.getElementById("signOutBtn")
+  signOutBtn: document.getElementById("signOutBtn"),
+  checkoutConfirmBackdrop: document.getElementById("checkoutConfirmBackdrop"),
+  closeCheckoutConfirmBtn: document.getElementById("closeCheckoutConfirmBtn"),
+  checkoutDeliveryInfo: document.getElementById("checkoutDeliveryInfo"),
+  checkoutConfirmItems: document.getElementById("checkoutConfirmItems"),
+  checkoutConfirmTotal: document.getElementById("checkoutConfirmTotal"),
+  orderPaymentMethod: document.getElementById("orderPaymentMethod"),
+  backToCartBtn: document.getElementById("backToCartBtn"),
+  confirmAppOrderBtn: document.getElementById("confirmAppOrderBtn"),
+  customerOrdersBackdrop: document.getElementById("customerOrdersBackdrop"),
+  closeCustomerOrdersBtn: document.getElementById("closeCustomerOrdersBtn"),
+  backToOrdersListBtn: document.getElementById("backToOrdersListBtn"),
+  customerOrderList: document.getElementById("customerOrderList"),
+  customerOrderDetail: document.getElementById("customerOrderDetail")
 };
 
 function getUserDisplayName(user) {
@@ -80,6 +107,43 @@ function renderAccountButton() {
     ? (state.profile?.known_as || "Minha conta")
     : "Entrar";
   ui.accountBtn.setAttribute("aria-label", state.user ? "Abrir minha conta" : "Entrar com Google");
+  ui.myOrdersBtn.hidden = !state.user;
+}
+
+function startCustomerLogin() {
+  if (state.cart.length) savePendingCheckoutSnapshot();
+  db.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: `${window.location.origin}${window.location.pathname}${window.location.search}` }
+  }).then(({ error }) => {
+    if (error) setStatus("Não foi possível iniciar o login.", "err");
+  });
+}
+
+function savePendingCheckoutSnapshot() {
+  try {
+    const snapshot = { cart: state.cart, note: String(ui.cartNote?.value || ""), savedAt: Date.now() };
+    sessionStorage.setItem(APP_CHECKOUT_SNAPSHOT_KEY, JSON.stringify(snapshot));
+    persistCart();
+  } catch (error) {
+    console.warn("Não foi possível guardar o carrinho antes do login:", error);
+  }
+}
+
+function restorePendingCheckoutSnapshot() {
+  try {
+    if (sessionStorage.getItem(APP_CHECKOUT_INTENT_KEY) !== "confirm") return;
+    const raw = sessionStorage.getItem(APP_CHECKOUT_SNAPSHOT_KEY);
+    if (!raw) return;
+    const snapshot = JSON.parse(raw);
+    if (!Array.isArray(snapshot?.cart)) return;
+    state.cart = snapshot.cart;
+    if (ui.cartNote) ui.cartNote.value = String(snapshot.note || "");
+    persistCart();
+    renderCart();
+  } catch (error) {
+    console.warn("Não foi possível restaurar o carrinho após o login:", error);
+  }
 }
 
 async function loadCustomerProfile() {
@@ -99,12 +163,7 @@ async function loadCustomerProfile() {
 
 function openAccountDialog() {
   if (!state.user) {
-    db.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}${window.location.pathname}${window.location.search}` }
-    }).then(({ error }) => {
-      if (error) setStatus("Não foi possível iniciar o login.", "err");
-    });
+    startCustomerLogin();
     return;
   }
   const form = ui.profileForm;
@@ -130,10 +189,15 @@ function closeAccountDialog() {
 async function saveCustomerProfile(event) {
   event.preventDefault();
   if (!state.user) return;
+  if (!ui.profileForm.reportValidity()) return;
   const form = new FormData(ui.profileForm);
   const knownAs = String(form.get("known_as") || "").trim();
   const phone = String(form.get("phone") || "").trim();
-  if (!knownAs || !phone) return;
+  const street = String(form.get("street") || "").trim();
+  if (!knownAs || !phone || !street) {
+    setStatus("Preencha como você é conhecido, seu telefone e onde você mora.", "err");
+    return;
+  }
   ui.saveProfileBtn.disabled = true;
   try {
     const { error } = await db.from("profiles").upsert({
@@ -142,7 +206,7 @@ async function saveCustomerProfile(event) {
       full_name: getUserDisplayName(state.user) || null,
       known_as: knownAs,
       phone,
-      street: String(form.get("street") || "").trim() || null,
+      street,
       landmark: String(form.get("landmark") || "").trim() || null,
       address_extra: String(form.get("address_extra") || "").trim() || null,
       updated_at: new Date().toISOString()
@@ -151,6 +215,7 @@ async function saveCustomerProfile(event) {
     await loadCustomerProfile();
     closeAccountDialog();
     setStatus("Cadastro salvo.", "ok");
+    await resumePendingAppCheckout();
   } catch (error) {
     console.error("Falha ao salvar perfil:", error);
     setStatus("Não foi possível salvar o cadastro.", "err");
@@ -160,6 +225,28 @@ async function saveCustomerProfile(event) {
 }
 
 async function initializeCustomerAuth() {
+  db.auth.onAuthStateChange((_event, session) => {
+    const nextUser = session?.user || null;
+    if (state.user?.id !== nextUser?.id) {
+      state.customerOrders = [];
+      state.selectedCustomerOrderId = null;
+      if (!nextUser && ui.customerOrdersBackdrop.classList.contains("show")) closeCustomerOrders();
+    }
+    state.user = nextUser;
+    state.profile = null;
+    renderAccountButton();
+    window.setTimeout(async () => {
+      try {
+        await loadCustomerProfile();
+        await resumePendingAppCheckout();
+        if (state.user && ui.customerOrdersBackdrop.classList.contains("show")) {
+          await loadCustomerOrders(state.selectedCustomerOrderId);
+        }
+      } catch (profileError) {
+        console.error("Falha ao carregar perfil:", profileError);
+      }
+    }, 0);
+  });
   const { data, error } = await db.auth.getSession();
   if (error) console.error("Falha ao recuperar sessão:", error);
   state.user = data?.session?.user || null;
@@ -167,14 +254,30 @@ async function initializeCustomerAuth() {
   catch (profileError) { console.error("Falha ao carregar perfil:", profileError); }
   state.authReady = true;
   renderAccountButton();
-  db.auth.onAuthStateChange((_event, session) => {
-    state.user = session?.user || null;
-    state.profile = null;
-    renderAccountButton();
-    window.setTimeout(() => loadCustomerProfile().catch((profileError) => {
-      console.error("Falha ao carregar perfil:", profileError);
-    }), 0);
-  });
+  await resumePendingAppCheckout();
+}
+
+async function resumePendingAppCheckout() {
+  if (checkoutResumeInFlight) return;
+  checkoutResumeInFlight = true;
+  try {
+    if (sessionStorage.getItem(APP_CHECKOUT_INTENT_KEY) !== "confirm") return;
+    restorePendingCheckoutSnapshot();
+    if (!state.user) return;
+    if (!hasCompleteOrderProfile()) {
+      openAccountDialog();
+      return;
+    }
+    sessionStorage.removeItem(APP_CHECKOUT_INTENT_KEY);
+    closeCart();
+    openCheckoutConfirmation();
+  } finally {
+    checkoutResumeInFlight = false;
+  }
+}
+
+function hasCompleteOrderProfile() {
+  return Boolean(String(state.profile?.known_as || "").trim() && String(state.profile?.phone || "").trim() && String(state.profile?.street || "").trim());
 }
 
 function getCartTotals() {
@@ -383,6 +486,234 @@ function openCart() {
 
 function closeCart() {
   ui.cartBackdrop.classList.remove("show");
+}
+
+function openCheckoutConfirmation() {
+  if (!state.cart.length) return;
+  savePendingCheckoutSnapshot();
+  ui.checkoutDeliveryInfo.innerHTML = [
+    `<strong>${escapeHtml(state.profile?.known_as || "")}</strong>`,
+    escapeHtml(state.profile?.phone || ""),
+    escapeHtml([state.profile?.street, state.profile?.landmark, state.profile?.address_extra].filter(Boolean).join(" · "))
+  ].filter(Boolean).join("<br>");
+  ui.checkoutConfirmItems.innerHTML = state.cart.map((entry) => `
+    <article class="order-confirm-item">
+      <div><strong>${Number(entry.qty)}× ${escapeHtml(entry.name)}</strong>
+        ${entry.optionsText ? `<small>${escapeHtml(entry.optionsText)}</small>` : ""}
+        ${entry.note ? `<small>${escapeHtml(entry.note)}</small>` : ""}
+      </div><span>${currency(Number(entry.price || 0) * Number(entry.qty || 0))}</span>
+    </article>
+  `).join("") + (String(ui.cartNote.value || "").trim()
+    ? `<p class="customer-order-notes">${escapeHtml(String(ui.cartNote.value).trim())}</p>`
+    : "");
+  ui.checkoutConfirmTotal.textContent = currency(getCartTotals().total);
+  ui.confirmAppOrderBtn.disabled = false;
+  ui.confirmAppOrderBtn.textContent = "Confirmar pedido";
+  ui.checkoutConfirmBackdrop.hidden = false;
+  ui.checkoutConfirmBackdrop.classList.add("show");
+  lockPageScroll();
+}
+
+function closeCheckoutConfirmation() {
+  ui.checkoutConfirmBackdrop.classList.remove("show");
+  ui.checkoutConfirmBackdrop.hidden = true;
+  unlockPageScroll();
+}
+
+async function startAppCheckout() {
+  if (!state.cart.length) return;
+  await refreshDataNow({ showError: false });
+  syncCartWithCurrentCatalog();
+  const availability = getCurrentAvailabilityMap();
+  if (state.cart.some((entry) => isCartEntryUnavailable(entry, availability))) {
+    setStatus("Remova os itens indisponíveis antes de continuar.", "err");
+    renderCart();
+    return;
+  }
+  const { data } = await db.auth.getSession();
+  state.user = data?.session?.user || state.user;
+  if (!state.user) {
+    sessionStorage.setItem(APP_CHECKOUT_INTENT_KEY, "confirm");
+    startCustomerLogin();
+    return;
+  }
+  try { await loadCustomerProfile(); }
+  catch (error) {
+    console.error("Falha ao carregar perfil:", error);
+    setStatus("Não foi possível carregar seu cadastro.", "err");
+    return;
+  }
+  if (!hasCompleteOrderProfile()) {
+    sessionStorage.setItem(APP_CHECKOUT_INTENT_KEY, "confirm");
+    openAccountDialog();
+    setStatus("Complete seu cadastro para fazer o pedido.", "err");
+    return;
+  }
+  openCheckoutConfirmation();
+}
+
+function syncCartWithCurrentCatalog() {
+  state.cart.forEach((entry) => {
+    const item = state.items.find((candidate) => String(candidate.id) === String(entry.id));
+    if (!item) return;
+    let unitPrice = Number(item.price || 0);
+    state.associations.filter((association) => association.owner_id === item.id).forEach((association) => {
+      const component = state.compMap[association.composition_id];
+      if (!component) return;
+      const defaultQuantity = Math.max(0, Number(association.link_value || 0));
+      let selected = Math.max(0, Number(entry.modState?.[association.id] ?? defaultQuantity));
+      if (association.link_type === "delta") selected = Math.min(2, selected);
+      else if (association.link_type === "complementary") selected = Math.min(1, selected);
+      else if (association.link_type === "scalable") selected = Math.min(Number(component.max_quantity ?? 4), selected);
+      unitPrice += (selected - defaultQuantity) * Number(component.price || 0);
+    });
+    entry.name = item.name;
+    entry.price = Math.max(0, unitPrice);
+  });
+  renderCart();
+}
+
+async function submitAppOrder() {
+  if (state.user) {
+    try { await loadCustomerProfile(); }
+    catch (error) {
+      console.error("Falha ao validar cadastro:", error);
+      setStatus("Não foi possível validar seu cadastro.", "err");
+      return;
+    }
+  }
+  if (!state.user || !hasCompleteOrderProfile() || !state.cart.length) {
+    if (state.user && !hasCompleteOrderProfile()) openAccountDialog();
+    return;
+  }
+  ui.confirmAppOrderBtn.disabled = true;
+  ui.confirmAppOrderBtn.textContent = "Enviando...";
+  try {
+    const payload = state.cart.map((entry) => ({
+      item_id: String(entry.id),
+      quantity: Number(entry.qty),
+      notes: String(entry.note || ""),
+      options_text: String(entry.optionsText || ""),
+      mod_state: entry.modState && typeof entry.modState === "object" ? entry.modState : {}
+    }));
+    const { data: orderId, error } = await db.rpc("submit_app_order", {
+      p_items: payload,
+      p_notes: String(ui.cartNote.value || "").trim() || null,
+      p_payment_method: ui.orderPaymentMethod.value
+    });
+    if (error) throw error;
+    state.cart = [];
+    ui.cartNote.value = "";
+    sessionStorage.removeItem(APP_CHECKOUT_INTENT_KEY);
+    sessionStorage.removeItem(APP_CHECKOUT_SNAPSHOT_KEY);
+    persistCart();
+    renderCart();
+    closeCheckoutConfirmation();
+    closeCart();
+    setStatus("Pedido feito.", "ok");
+    await openCustomerOrders(orderId);
+  } catch (error) {
+    console.error("Falha ao enviar pedido:", error);
+    setStatus(error.message || "Não foi possível enviar o pedido.", "err");
+    ui.confirmAppOrderBtn.disabled = false;
+    ui.confirmAppOrderBtn.textContent = "Confirmar pedido";
+  }
+}
+
+async function openCustomerOrders(selectedId = null) {
+  if (!state.user) {
+    startCustomerLogin();
+    return;
+  }
+  state.selectedCustomerOrderId = selectedId;
+  ui.customerOrderList.hidden = false;
+  ui.customerOrderDetail.hidden = true;
+  ui.backToOrdersListBtn.hidden = true;
+  ui.customerOrdersBackdrop.hidden = false;
+  ui.customerOrdersBackdrop.classList.add("show");
+  lockPageScroll();
+  await loadCustomerOrders(selectedId);
+  if (state.customerOrdersPollingTimer) clearInterval(state.customerOrdersPollingTimer);
+  state.customerOrdersPollingTimer = window.setInterval(() => {
+    if (ui.customerOrdersBackdrop.classList.contains("show")) {
+      loadCustomerOrders(state.selectedCustomerOrderId).catch((error) => console.error("Falha ao atualizar pedidos:", error));
+    }
+  }, 20000);
+}
+
+async function loadCustomerOrders(selectedId = null) {
+  if (!state.user) return;
+  const { data, error } = await db.from("orders")
+    .select("id, status, created_at, customer_known_as, phone, delivery_address, notes, payment_method, subtotal, total, order_items(id, item_name, unit_price, quantity, notes, snapshot, order_item_components(id, component_name, quantity, free_quantity, charged_quantity, unit_price)), order_status_history(id, from_status, to_status, created_at)")
+    .eq("customer_id", state.user.id)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("Falha ao carregar pedidos:", error);
+    ui.customerOrderList.innerHTML = '<p>Não foi possível carregar seus pedidos.</p>';
+    return;
+  }
+  state.customerOrders = data || [];
+  renderCustomerOrders();
+  if (selectedId) {
+    const selected = state.customerOrders.find((order) => order.id === selectedId);
+    if (selected) showCustomerOrderDetail(selected);
+  }
+}
+
+function renderCustomerOrders() {
+  if (!state.customerOrders.length) {
+    ui.customerOrderList.innerHTML = '<p class="customer-orders-empty">Nenhum pedido.</p>';
+    return;
+  }
+  ui.customerOrderList.innerHTML = state.customerOrders.map((order) => {
+    const status = order.status === "cancelled"
+      ? "Pedido cancelado"
+      : (ORDER_STAGES.find((stage) => stage.key === order.status)?.label || "Pedido");
+    const itemNames = (order.order_items || []).map((item) => `${Number(item.quantity)}× ${escapeHtml(item.item_name)}`).join(" · ");
+    return `<article class="customer-order-card">
+      <div><strong>${new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong>
+        <span class="customer-order-status">${escapeHtml(status)}</span><small>${itemNames}</small>
+      </div><strong>${currency(order.total)}</strong>
+      <button type="button" class="ghost-btn" data-customer-order="${escapeHtml(order.id)}">Acompanhar</button>
+    </article>`;
+  }).join("");
+}
+
+function showCustomerOrderDetail(order) {
+  state.selectedCustomerOrderId = order.id;
+  const stages = order.status === "cancelled"
+    ? [...ORDER_STAGES, { key: "cancelled", label: "Pedido cancelado" }]
+    : ORDER_STAGES;
+  const stageIndex = stages.findIndex((stage) => stage.key === order.status);
+  const history = [...(order.order_status_history || [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const timeline = stages.map((stage, index) => {
+    const event = history.find((entry) => entry.to_status === stage.key);
+    const cls = index < stageIndex ? "is-complete" : (index === stageIndex ? "is-current" : "");
+    const time = event ? `<time>${new Date(event.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</time>` : "";
+    return `<li class="order-stage ${cls}"><span class="order-stage-dot"></span><div><strong>${stage.label}</strong>${time}</div></li>`;
+  }).join("");
+  const items = (order.order_items || []).map((item) => {
+    const components = (item.order_item_components || []).filter((component) => Number(component.quantity) > 0)
+      .map((component) => `${escapeHtml(component.component_name)}${Number(component.quantity) > 1 ? ` ×${Number(component.quantity)}` : ""}`).join(" · ");
+    return `<article class="customer-order-line"><div><strong>${Number(item.quantity)}× ${escapeHtml(item.item_name)}</strong>${components ? `<small>${components}</small>` : ""}${item.notes ? `<small>${escapeHtml(item.notes)}</small>` : ""}</div><span>${currency(Number(item.unit_price) * Number(item.quantity))}</span></article>`;
+  }).join("");
+  ui.customerOrderDetail.innerHTML = `<div class="order-tracking-head"><strong>${escapeHtml(order.customer_known_as || state.profile?.known_as || "Pedido")}</strong><span>${new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></div>
+    <ol class="order-timeline">${timeline}</ol><div class="customer-order-lines">${items}</div>
+    ${order.notes ? `<p class="customer-order-notes">${escapeHtml(order.notes)}</p>` : ""}
+    <div class="order-confirm-total"><span>${order.payment_method === "at_delivery" ? "Pessoalmente na entrega" : "Pix"}</span><strong>${currency(order.total)}</strong></div>`;
+  ui.customerOrderList.hidden = true;
+  ui.customerOrderDetail.hidden = false;
+  ui.backToOrdersListBtn.hidden = false;
+}
+
+function closeCustomerOrders() {
+  ui.customerOrdersBackdrop.classList.remove("show");
+  ui.customerOrdersBackdrop.hidden = true;
+  if (state.customerOrdersPollingTimer) {
+    clearInterval(state.customerOrdersPollingTimer);
+    state.customerOrdersPollingTimer = null;
+  }
+  unlockPageScroll();
 }
 
 function updateViewportMetrics() {
@@ -1314,7 +1645,7 @@ function openItemModal(item, options = {}) {
     if (entry.assoc.link_type === "complementary") {
       return Math.min(1, n);
     }
-    return n;
+    return Math.min(Math.max(0, Number(entry.comp.max_quantity ?? 4)), n);
   };
 
   const compExtra = (entry, value) => {
@@ -1619,11 +1950,34 @@ function bindEvents() {
   });
 
   ui.accountBtn.addEventListener("click", openAccountDialog);
+  ui.myOrdersBtn.addEventListener("click", () => openCustomerOrders());
   ui.closeAccountBtn.addEventListener("click", closeAccountDialog);
   ui.accountBackdrop.addEventListener("click", (event) => {
     if (event.target === ui.accountBackdrop) closeAccountDialog();
   });
   ui.profileForm.addEventListener("submit", saveCustomerProfile);
+  ui.closeCheckoutConfirmBtn.addEventListener("click", closeCheckoutConfirmation);
+  ui.checkoutConfirmBackdrop.addEventListener("click", (event) => {
+    if (event.target === ui.checkoutConfirmBackdrop) closeCheckoutConfirmation();
+  });
+  ui.backToCartBtn.addEventListener("click", closeCheckoutConfirmation);
+  ui.confirmAppOrderBtn.addEventListener("click", submitAppOrder);
+  ui.closeCustomerOrdersBtn.addEventListener("click", closeCustomerOrders);
+  ui.customerOrdersBackdrop.addEventListener("click", (event) => {
+    if (event.target === ui.customerOrdersBackdrop) closeCustomerOrders();
+  });
+  ui.backToOrdersListBtn.addEventListener("click", () => {
+    state.selectedCustomerOrderId = null;
+    ui.customerOrderDetail.hidden = true;
+    ui.customerOrderList.hidden = false;
+    ui.backToOrdersListBtn.hidden = true;
+  });
+  ui.customerOrderList.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-customer-order]");
+    if (!button) return;
+    const order = state.customerOrders.find((entry) => entry.id === button.dataset.customerOrder);
+    if (order) showCustomerOrderDetail(order);
+  });
   ui.signOutBtn.addEventListener("click", async () => {
     const { error } = await db.auth.signOut();
     if (error) setStatus("Não foi possível sair da conta.", "err");
@@ -1692,16 +2046,7 @@ function bindEvents() {
   });
 
   ui.appCheckoutBtn.addEventListener("click", () => {
-    if (!state.user) {
-      openAccountDialog();
-      return;
-    }
-    if (!state.profile?.known_as || !state.profile?.phone) {
-      openAccountDialog();
-      setStatus("Complete seu cadastro para fazer o pedido.", "err");
-      return;
-    }
-    setStatus("O envio do pedido pelo aplicativo será ativado na próxima etapa.");
+    startAppCheckout();
   });
 
   ui.copyMessageBtn.addEventListener("click", copyOrderMessage);
@@ -1853,6 +2198,7 @@ async function init() {
   bindViewportMetrics();
   bindEvents();
   restoreCart();
+  restorePendingCheckoutSnapshot();
   renderCart();
   initializeCustomerAuth();
 

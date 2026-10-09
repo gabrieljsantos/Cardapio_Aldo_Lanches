@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/index.css">
+  <link rel="stylesheet" href="assets/css/index.css?v=20261009-orders2">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -29,7 +29,10 @@
             </a>
           </div>
         </div>
-        <button type="button" class="account-btn" id="accountBtn">Entrar</button>
+        <div class="header-account-actions">
+          <button type="button" class="account-btn" id="myOrdersBtn" hidden>Meus pedidos</button>
+          <button type="button" class="account-btn" id="accountBtn">Entrar</button>
+        </div>
       </div>
     </header>
 
@@ -63,7 +66,7 @@
           <input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" required>
         </label>
         <label>Onde você mora?
-          <input name="street" autocomplete="address-level2" maxlength="180">
+          <input name="street" autocomplete="address-level2" maxlength="180" required>
         </label>
         <label>Ponto de referência
           <input name="landmark" maxlength="180">
@@ -103,6 +106,37 @@
     </aside>
   </div>
 
+  <div class="account-backdrop" id="checkoutConfirmBackdrop" hidden>
+    <section class="account-dialog order-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="checkoutConfirmTitle">
+      <div class="account-dialog-head">
+        <h2 id="checkoutConfirmTitle">Confirmar pedido</h2>
+        <button type="button" class="ghost-btn" id="closeCheckoutConfirmBtn" aria-label="Fechar">×</button>
+      </div>
+      <div id="checkoutDeliveryInfo" class="checkout-delivery-info"></div>
+      <div id="checkoutConfirmItems" class="order-confirm-items"></div>
+      <div class="order-confirm-total"><span>Total</span><strong id="checkoutConfirmTotal"></strong></div>
+      <label class="order-payment-label">Pagamento
+        <select id="orderPaymentMethod"><option value="pix">Pix</option><option value="at_delivery">Pessoalmente na entrega</option></select>
+      </label>
+      <div class="account-actions">
+        <button type="button" class="ghost-btn" id="backToCartBtn">Voltar</button>
+        <button type="button" class="checkout-btn" id="confirmAppOrderBtn">Confirmar pedido</button>
+      </div>
+    </section>
+  </div>
+
+  <div class="account-backdrop" id="customerOrdersBackdrop" hidden>
+    <section class="account-dialog customer-orders-dialog" role="dialog" aria-modal="true" aria-labelledby="customerOrdersTitle">
+      <div class="account-dialog-head">
+        <button type="button" class="ghost-btn" id="backToOrdersListBtn" hidden>Voltar</button>
+        <h2 id="customerOrdersTitle">Meus pedidos</h2>
+        <button type="button" class="ghost-btn" id="closeCustomerOrdersBtn" aria-label="Fechar">×</button>
+      </div>
+      <div id="customerOrderList" class="customer-order-list"></div>
+      <div id="customerOrderDetail" class="customer-order-detail" hidden></div>
+    </section>
+  </div>
+
   <button type="button" class="cart-fab" id="cartFab" aria-label="Abrir carrinho">
     <span id="cartFabCount">0 itens</span>
     <strong id="cartFabTotal">R$ 0,00</strong>
@@ -117,6 +151,6 @@
     </nav>
   </footer>
 
-  <script src="assets/js/index.js"></script>
+  <script src="assets/js/index.js?v=20261009-orders2"></script>
 </body>
 </html>
