@@ -1,0 +1,20 @@
+{
+  ".vscode/settings.json": {
+    "mtime": 1776532107.0896955,
+    "seen": 1791120183.9912977,
+    "ast_hash": "19751b2a32e46d1ba1477f357123a898",
+    "semantic_hash": "19751b2a32e46d1ba1477f357123a898"
+  },
+  "assets/js/index.js": {
+    "mtime": 1779649372.9556222,
+    "seen": 1791120183.9913156,
+    "ast_hash": "c015e896c243a49bcf5920e715c0bd9a",
+    "semantic_hash": "c015e896c243a49bcf5920e715c0bd9a"
+  },
+  "backup_esquema_2026-04-04/index.js": {
+    "mtime": 1775301438.5451193,
+    "seen": 1791120183.9913256,
+    "ast_hash": "a184c4e3071b99517fcffb173e9a7a0b",
+    "semantic_hash": "a184c4e3071b99517fcffb173e9a7a0b"
+  }
+}

@@ -128,6 +128,67 @@ img {
   min-width: 0;
 }
 
+.account-btn {
+  flex: 0 0 auto;
+  border: 1px solid #f5a76e;
+  border-radius: 999px;
+  background: #fff3e9;
+  color: #a84312;
+  padding: 9px 14px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.account-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(7, 13, 20, 0.55);
+}
+
+.account-backdrop.show { display: flex; }
+
+.account-dialog {
+  width: min(100%, 460px);
+  max-height: min(90vh, 720px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}
+
+.account-dialog-head, .account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.account-dialog-head h2 { margin: 0; }
+.account-email { color: var(--muted); overflow-wrap: anywhere; }
+.account-dialog form { display: grid; gap: 13px; }
+.account-dialog label { display: grid; gap: 6px; font-weight: 600; }
+.account-dialog input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font: inherit;
+}
+.account-actions .checkout-btn { flex: 1; }
+.account-actions [hidden] { display: none; }
+.app-checkout-btn { background: #fff; color: #a84312; border: 1px solid #f5a76e; }
+
 .header-name {
   margin: 0;
   font-family: "Bricolage Grotesque", "Segoe UI", sans-serif;
@@ -1353,6 +1414,8 @@ body.modal-open {
     padding: 10px 12px;
     gap: 10px;
   }
+
+  .account-btn { padding: 8px 10px; font-size: 0.8rem; }
 
   .header-logo {
     --logo-base-size: 48px;

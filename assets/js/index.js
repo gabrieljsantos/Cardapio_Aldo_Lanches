@@ -1,7 +1,7 @@
 const { createClient } = supabase;
 
 const SUPABASE_URL = "https://bbrpnbetwwnwpwogjjrv.supabase.co";
-const SUPABASE_KEY = "sb_publishable_t5jkscaZPjrdbs_2uSFK4g_PjZeK3yi";
+const SUPABASE_KEY = "sb_publishable_IaoUthm5d9UzZCLsQYP2pg_VhsLIl7J";
 const CART_STORAGE_KEY = "smart-store-hub-cart-v1";
 
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -26,7 +26,10 @@ const state = {
   realtimeChannel: null,
   refreshTimer: null,
   refreshInFlight: false,
-  pollingTimer: null
+  pollingTimer: null,
+  user: null,
+  profile: null,
+  authReady: false
 };
 
 const ui = {
@@ -55,8 +58,124 @@ const ui = {
   closeCartBtn: document.getElementById("closeCartBtn"),
   removeUnavailableBtn: document.getElementById("removeUnavailableBtn"),
   copyMessageBtn: document.getElementById("copyMessageBtn"),
-  checkoutBtn: document.getElementById("checkoutBtn")
+  appCheckoutBtn: document.getElementById("appCheckoutBtn"),
+  checkoutBtn: document.getElementById("checkoutBtn"),
+  accountBtn: document.getElementById("accountBtn"),
+  accountBackdrop: document.getElementById("accountBackdrop"),
+  closeAccountBtn: document.getElementById("closeAccountBtn"),
+  accountEmail: document.getElementById("accountEmail"),
+  profileForm: document.getElementById("profileForm"),
+  saveProfileBtn: document.getElementById("saveProfileBtn"),
+  signOutBtn: document.getElementById("signOutBtn")
 };
+
+function getUserDisplayName(user) {
+  const metadata = user?.user_metadata || {};
+  return String(metadata.full_name || metadata.name || "").trim();
+}
+
+function renderAccountButton() {
+  if (!ui.accountBtn) return;
+  ui.accountBtn.textContent = state.user
+    ? (state.profile?.known_as || "Minha conta")
+    : "Entrar";
+  ui.accountBtn.setAttribute("aria-label", state.user ? "Abrir minha conta" : "Entrar com Google");
+}
+
+async function loadCustomerProfile() {
+  if (!state.user) {
+    state.profile = null;
+    renderAccountButton();
+    return;
+  }
+  const { data, error } = await db.from("profiles")
+    .select("email, full_name, known_as, phone, street, landmark, address_extra")
+    .eq("user_id", state.user.id)
+    .maybeSingle();
+  if (error) throw error;
+  state.profile = data || null;
+  renderAccountButton();
+}
+
+function openAccountDialog() {
+  if (!state.user) {
+    db.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: `${window.location.origin}${window.location.pathname}${window.location.search}` }
+    }).then(({ error }) => {
+      if (error) setStatus("Não foi possível iniciar o login.", "err");
+    });
+    return;
+  }
+  const form = ui.profileForm;
+  const profile = state.profile || {};
+  form.elements.known_as.value = profile.known_as || "";
+  form.elements.phone.value = profile.phone || "";
+  form.elements.street.value = profile.street || "";
+  form.elements.landmark.value = profile.landmark || "";
+  form.elements.address_extra.value = profile.address_extra || "";
+  ui.accountEmail.textContent = state.user.email || "";
+  ui.signOutBtn.hidden = false;
+  ui.accountBackdrop.hidden = false;
+  ui.accountBackdrop.classList.add("show");
+  lockPageScroll();
+}
+
+function closeAccountDialog() {
+  ui.accountBackdrop.classList.remove("show");
+  ui.accountBackdrop.hidden = true;
+  unlockPageScroll();
+}
+
+async function saveCustomerProfile(event) {
+  event.preventDefault();
+  if (!state.user) return;
+  const form = new FormData(ui.profileForm);
+  const knownAs = String(form.get("known_as") || "").trim();
+  const phone = String(form.get("phone") || "").trim();
+  if (!knownAs || !phone) return;
+  ui.saveProfileBtn.disabled = true;
+  try {
+    const { error } = await db.from("profiles").upsert({
+      user_id: state.user.id,
+      email: state.user.email || null,
+      full_name: getUserDisplayName(state.user) || null,
+      known_as: knownAs,
+      phone,
+      street: String(form.get("street") || "").trim() || null,
+      landmark: String(form.get("landmark") || "").trim() || null,
+      address_extra: String(form.get("address_extra") || "").trim() || null,
+      updated_at: new Date().toISOString()
+    }, { onConflict: "user_id" });
+    if (error) throw error;
+    await loadCustomerProfile();
+    closeAccountDialog();
+    setStatus("Cadastro salvo.", "ok");
+  } catch (error) {
+    console.error("Falha ao salvar perfil:", error);
+    setStatus("Não foi possível salvar o cadastro.", "err");
+  } finally {
+    ui.saveProfileBtn.disabled = false;
+  }
+}
+
+async function initializeCustomerAuth() {
+  const { data, error } = await db.auth.getSession();
+  if (error) console.error("Falha ao recuperar sessão:", error);
+  state.user = data?.session?.user || null;
+  try { await loadCustomerProfile(); }
+  catch (profileError) { console.error("Falha ao carregar perfil:", profileError); }
+  state.authReady = true;
+  renderAccountButton();
+  db.auth.onAuthStateChange((_event, session) => {
+    state.user = session?.user || null;
+    state.profile = null;
+    renderAccountButton();
+    window.setTimeout(() => loadCustomerProfile().catch((profileError) => {
+      console.error("Falha ao carregar perfil:", profileError);
+    }), 0);
+  });
+}
 
 function getCartTotals() {
   const count = state.cart.reduce((acc, entry) => acc + entry.qty, 0);
@@ -152,12 +271,15 @@ function renderCart() {
   ui.cartFabCount.textContent = `${count} ${count === 1 ? "item" : "itens"}`;
   ui.cartFabTotal.textContent = currency(total);
   ui.checkoutBtn.disabled = count === 0 || hasUnavailable;
+  ui.appCheckoutBtn.disabled = count === 0 || hasUnavailable;
+  ui.appCheckoutBtn.textContent = state.user ? "Fazer pedido" : "Entrar para fazer o pedido";
   ui.removeUnavailableBtn.hidden = !hasUnavailable;
 
   if (count === 0) {
     ui.cartFab.classList.remove("show");
     ui.cartList.innerHTML = '<div class="cart-empty">Seu carrinho está vazio.</div>';
     ui.checkoutBtn.textContent = "Finalizar no WhatsApp";
+    ui.appCheckoutBtn.disabled = true;
     ui.removeUnavailableBtn.hidden = true;
     persistCart();
     return;
@@ -1496,6 +1618,18 @@ function bindEvents() {
     applySearch();
   });
 
+  ui.accountBtn.addEventListener("click", openAccountDialog);
+  ui.closeAccountBtn.addEventListener("click", closeAccountDialog);
+  ui.accountBackdrop.addEventListener("click", (event) => {
+    if (event.target === ui.accountBackdrop) closeAccountDialog();
+  });
+  ui.profileForm.addEventListener("submit", saveCustomerProfile);
+  ui.signOutBtn.addEventListener("click", async () => {
+    const { error } = await db.auth.signOut();
+    if (error) setStatus("Não foi possível sair da conta.", "err");
+    else closeAccountDialog();
+  });
+
   ui.modal.addEventListener("click", (event) => {
     if (event.target === ui.modal) {
       closeModal();
@@ -1555,6 +1689,19 @@ function bindEvents() {
       return;
     }
     checkoutWhatsApp();
+  });
+
+  ui.appCheckoutBtn.addEventListener("click", () => {
+    if (!state.user) {
+      openAccountDialog();
+      return;
+    }
+    if (!state.profile?.known_as || !state.profile?.phone) {
+      openAccountDialog();
+      setStatus("Complete seu cadastro para fazer o pedido.", "err");
+      return;
+    }
+    setStatus("O envio do pedido pelo aplicativo será ativado na próxima etapa.");
   });
 
   ui.copyMessageBtn.addEventListener("click", copyOrderMessage);
@@ -1707,6 +1854,7 @@ async function init() {
   bindEvents();
   restoreCart();
   renderCart();
+  initializeCustomerAuth();
 
   try {
     await loadData();

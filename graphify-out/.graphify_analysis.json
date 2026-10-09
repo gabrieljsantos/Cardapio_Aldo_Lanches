@@ -1,0 +1,297 @@
+{
+  "communities": {
+    "0": [
+      "assets_js_index_addtocart",
+      "assets_js_index_bindevents",
+      "assets_js_index_buildordermessage",
+      "assets_js_index_checkoutwhatsapp",
+      "assets_js_index_closecart",
+      "assets_js_index_copyordermessage",
+      "assets_js_index_currency",
+      "assets_js_index_getcarttotals",
+      "assets_js_index_getcurrentavailabilitymap",
+      "assets_js_index_getvisibleitems",
+      "assets_js_index_iscartentryunavailable",
+      "assets_js_index_opencartedit",
+      "assets_js_index_persistcart",
+      "assets_js_index_removecartitem",
+      "assets_js_index_removeunavailablecartitems",
+      "assets_js_index_rendercart",
+      "assets_js_index_updatecartqty"
+    ],
+    "1": [
+      "assets_js_index",
+      "assets_js_index_bindviewportmetrics",
+      "assets_js_index_computeactiveitemids",
+      "assets_js_index_db",
+      "assets_js_index_getdaykey",
+      "assets_js_index_getvisiblecards",
+      "assets_js_index_isgroupactive",
+      "assets_js_index_linktypelabel",
+      "assets_js_index_linkvaluelabel",
+      "assets_js_index_nextvisiblereactdelayms",
+      "assets_js_index_schedulevisiblereactloop",
+      "assets_js_index_state",
+      "assets_js_index_tominutes",
+      "assets_js_index_triggercardvisiblereact",
+      "assets_js_index_ui",
+      "assets_js_index_updateviewportmetrics"
+    ],
+    "2": [
+      "backup_esquema_2026_04_04_index",
+      "backup_esquema_2026_04_04_index_computeactiveitemids",
+      "backup_esquema_2026_04_04_index_db",
+      "backup_esquema_2026_04_04_index_getdaykey",
+      "backup_esquema_2026_04_04_index_getvisibleitems",
+      "backup_esquema_2026_04_04_index_isgroupactive",
+      "backup_esquema_2026_04_04_index_linktypelabel",
+      "backup_esquema_2026_04_04_index_linkvaluelabel",
+      "backup_esquema_2026_04_04_index_rotatecardphotos",
+      "backup_esquema_2026_04_04_index_startphotorotation",
+      "backup_esquema_2026_04_04_index_state",
+      "backup_esquema_2026_04_04_index_tominutes",
+      "backup_esquema_2026_04_04_index_ui"
+    ],
+    "3": [
+      "assets_js_index_buildentrysignature",
+      "assets_js_index_buildsearchcompositiontext",
+      "assets_js_index_closemodal",
+      "assets_js_index_createitemcard",
+      "assets_js_index_escapehtml",
+      "assets_js_index_getitemphotos",
+      "assets_js_index_isvalidimageurl",
+      "assets_js_index_lockpagescroll",
+      "assets_js_index_openitemmodal",
+      "assets_js_index_returntohomeview",
+      "assets_js_index_safeimageurl",
+      "assets_js_index_unlockpagescroll"
+    ],
+    "4": [
+      "assets_js_index_bindrealtime",
+      "assets_js_index_init",
+      "assets_js_index_loaddata",
+      "assets_js_index_opencart",
+      "assets_js_index_refreshdatanow",
+      "assets_js_index_renderheader",
+      "assets_js_index_restorecart",
+      "assets_js_index_schedulerefreshfromrealtime",
+      "assets_js_index_setstatus",
+      "assets_js_index_setupheaderlogoscale",
+      "assets_js_index_startavailabilitypolling"
+    ],
+    "5": [
+      "backup_esquema_2026_04_04_index_addtocart",
+      "backup_esquema_2026_04_04_index_bindevents",
+      "backup_esquema_2026_04_04_index_checkoutwhatsapp",
+      "backup_esquema_2026_04_04_index_closecart",
+      "backup_esquema_2026_04_04_index_getcarttotals",
+      "backup_esquema_2026_04_04_index_opencart",
+      "backup_esquema_2026_04_04_index_opencartedit",
+      "backup_esquema_2026_04_04_index_removecartitem",
+      "backup_esquema_2026_04_04_index_rendercart",
+      "backup_esquema_2026_04_04_index_updatecartqty"
+    ],
+    "6": [
+      "backup_esquema_2026_04_04_index_buildentrysignature",
+      "backup_esquema_2026_04_04_index_closemodal",
+      "backup_esquema_2026_04_04_index_createitemcard",
+      "backup_esquema_2026_04_04_index_currency",
+      "backup_esquema_2026_04_04_index_escapehtml",
+      "backup_esquema_2026_04_04_index_getitemphotos",
+      "backup_esquema_2026_04_04_index_isvalidimageurl",
+      "backup_esquema_2026_04_04_index_openitemmodal",
+      "backup_esquema_2026_04_04_index_returntohomeview",
+      "backup_esquema_2026_04_04_index_safeimageurl"
+    ],
+    "7": [
+      "assets_js_index_rendercategorynav",
+      "assets_js_index_rendermenu",
+      "assets_js_index_restorephotostate",
+      "assets_js_index_rotatecardphotos",
+      "assets_js_index_savephotostate",
+      "assets_js_index_setupmenureveal",
+      "assets_js_index_startphotorotation"
+    ],
+    "8": [
+      "backup_esquema_2026_04_04_index_buildcategorytree",
+      "backup_esquema_2026_04_04_index_renderbranch",
+      "backup_esquema_2026_04_04_index_rendercategorynav",
+      "backup_esquema_2026_04_04_index_rendermenu",
+      "backup_esquema_2026_04_04_index_sortbyprioritythenname",
+      "backup_esquema_2026_04_04_index_sortpriorityvalue"
+    ],
+    "9": [
+      "assets_js_index_buildcategorytree",
+      "assets_js_index_buildinlinecompositiontext",
+      "assets_js_index_renderbranch",
+      "assets_js_index_sortbyprioritythenname",
+      "assets_js_index_sortpriorityvalue"
+    ],
+    "10": [
+      "backup_esquema_2026_04_04_index_init",
+      "backup_esquema_2026_04_04_index_loaddata",
+      "backup_esquema_2026_04_04_index_renderheader",
+      "backup_esquema_2026_04_04_index_setstatus",
+      "backup_esquema_2026_04_04_index_setupheaderlogoscale"
+    ],
+    "11": [
+      "assets_js_index_applysearch",
+      "assets_js_index_normalize"
+    ],
+    "12": [
+      "backup_esquema_2026_04_04_index_applysearch",
+      "backup_esquema_2026_04_04_index_normalize"
+    ]
+  },
+  "cohesion": {
+    "0": 0.21323529411764705,
+    "1": 0.18333333333333332,
+    "2": 0.21794871794871795,
+    "3": 0.22727272727272727,
+    "4": 0.2727272727272727,
+    "5": 0.26666666666666666,
+    "6": 0.3111111111111111,
+    "7": 0.2857142857142857,
+    "8": 0.4,
+    "9": 0.4,
+    "10": 0.5,
+    "11": 1.0,
+    "12": 1.0
+  },
+  "gods": [
+    {
+      "id": "assets_js_index_rendercart",
+      "label": "renderCart()",
+      "degree": 14
+    },
+    {
+      "id": "assets_js_index_openitemmodal",
+      "label": "openItemModal()",
+      "degree": 13
+    },
+    {
+      "id": "assets_js_index_rendermenu",
+      "label": "renderMenu()",
+      "degree": 13
+    },
+    {
+      "id": "assets_js_index_bindevents",
+      "label": "bindEvents()",
+      "degree": 12
+    },
+    {
+      "id": "assets_js_index_init",
+      "label": "init()",
+      "degree": 12
+    },
+    {
+      "id": "backup_esquema_2026_04_04_index_openitemmodal",
+      "label": "openItemModal()",
+      "degree": 12
+    },
+    {
+      "id": "assets_js_index_createitemcard",
+      "label": "createItemCard()",
+      "degree": 10
+    },
+    {
+      "id": "backup_esquema_2026_04_04_index_bindevents",
+      "label": "bindEvents()",
+      "degree": 10
+    },
+    {
+      "id": "backup_esquema_2026_04_04_index_rendercart",
+      "label": "renderCart()",
+      "degree": 9
+    },
+    {
+      "id": "backup_esquema_2026_04_04_index_init",
+      "label": "init()",
+      "degree": 8
+    }
+  ],
+  "surprises": [
+    {
+      "source": "bindEvents()",
+      "target": "applySearch()",
+      "source_files": [
+        "assets/js/index.js",
+        "assets/js/index.js"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "note": "Bridges community 0 → community 11"
+    },
+    {
+      "source": "bindEvents()",
+      "target": "closeModal()",
+      "source_files": [
+        "assets/js/index.js",
+        "assets/js/index.js"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "note": "Bridges community 0 → community 3"
+    },
+    {
+      "source": "bindEvents()",
+      "target": "openCart()",
+      "source_files": [
+        "assets/js/index.js",
+        "assets/js/index.js"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "note": "Bridges community 0 → community 4"
+    },
+    {
+      "source": "getVisibleItems()",
+      "target": "computeActiveItemIds()",
+      "source_files": [
+        "assets/js/index.js",
+        "assets/js/index.js"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "note": "Bridges community 0 → community 1"
+    },
+    {
+      "source": "renderMenu()",
+      "target": "getVisibleItems()",
+      "source_files": [
+        "assets/js/index.js",
+        "assets/js/index.js"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "note": "Bridges community 0 → community 7"
+    }
+  ],
+  "questions": [
+    {
+      "type": "bridge_node",
+      "question": "Why does `renderCart()` connect `Community 0` to `Community 1`, `Community 3`, `Community 4`?",
+      "why": "High betweenness centrality (0.005) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `renderMenu()` connect `Community 7` to `Community 0`, `Community 1`, `Community 4`, `Community 9`, `Community 11`?",
+      "why": "High betweenness centrality (0.005) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `openItemModal()` connect `Community 3` to `Community 0`, `Community 1`, `Community 4`?",
+      "why": "High betweenness centrality (0.004) - this node is a cross-community bridge."
+    },
+    {
+      "type": "verify_inferred",
+      "question": "Are the 3 inferred relationships involving `bindEvents()` (e.g. with `closeCart()` and `copyOrderMessage()`) actually correct?",
+      "why": "`bindEvents()` has 3 INFERRED edges - model-reasoned connections that need verification."
+    },
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `db`, `state`, `ui` to the rest of the system?",
+      "why": "6 weakly-connected nodes found - possible documentation gaps or missing edges."
+    }
+  ]
+}
