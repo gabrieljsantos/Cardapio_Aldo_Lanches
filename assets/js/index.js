@@ -3,6 +3,7 @@ const { createClient } = supabase;
 const SUPABASE_URL = "https://bbrpnbetwwnwpwogjjrv.supabase.co";
 const SUPABASE_KEY = "sb_publishable_IaoUthm5d9UzZCLsQYP2pg_VhsLIl7J";
 const CART_STORAGE_KEY = "smart-store-hub-cart-v1";
+const CART_NOTE_STORAGE_KEY = "smart-store-hub-cart-note-v1";
 const APP_CHECKOUT_INTENT_KEY = "smart-store-hub-app-checkout-intent";
 const APP_CHECKOUT_SNAPSHOT_KEY = "smart-store-hub-app-checkout-snapshot-v1";
 const CART_GROUP_ADJUSTMENTS_KEY = "smart-store-hub-cart-group-adjustments-v1";
@@ -375,7 +376,7 @@ function getSellableGroupTotals() {
     const adjustments = state.cartGroupAdjustments[group.packageId] || {};
     let totalQuantity = 0;
     for (const [componentId, component] of group.components) {
-      if (component.maxQuantity === 0) component.maxQuantity = Math.max(0, Number(component.member.component.max_quantity ?? 4));
+      if (component.maxQuantity === 0) component.maxQuantity = Math.max(0, Number(component.member.config.max_quantity ?? component.member.component.max_quantity ?? 4));
       component.adjustment = Math.trunc(Number(adjustments[componentId] || 0));
       component.quantity = Math.max(0, component.baseline + component.adjustment);
       if (component.member.component.tracks_stock !== false) component.maxQuantity = Math.min(component.maxQuantity, Math.max(0, Number(component.member.component.stock || 0)));
@@ -470,7 +471,7 @@ function buildEntryOptionsText(entry) {
         labels.push(difference>0?`Adicionar ${difference>1?`${difference}x `:""}${member.component.name}`:`Remover ${-difference>1?`${-difference}x `:""}${member.component.name}`);
       }
     }
-    return labels.join(" | ");
+    return labels.length?labels.join(" | "):previous.join(" | ");
   }
   if(associatedGroups.length)return "";
   for(const association of state.associations.filter(row=>String(row.owner_id)===String(entry.id))){
@@ -507,6 +508,7 @@ function isCartEntryUnavailable(entry, availabilityMap) {
 function persistCart() {
   try {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(state.cart));
+    localStorage.setItem(CART_NOTE_STORAGE_KEY, String(ui.cartNote?.value || ""));
   } catch (_) {
     // Ignora falhas de armazenamento local (ex.: modo privado).
   }
@@ -514,6 +516,7 @@ function persistCart() {
 
 function restoreCart() {
   try {
+    if (ui.cartNote) ui.cartNote.value = localStorage.getItem(CART_NOTE_STORAGE_KEY) || "";
     const pooled = JSON.parse(localStorage.getItem(CART_GROUP_ADJUSTMENTS_KEY) || "{}");
     state.cartGroupAdjustments = pooled && typeof pooled === "object" ? pooled : {};
     const raw = localStorage.getItem(CART_STORAGE_KEY);
@@ -585,7 +588,7 @@ function renderCart() {
   if (count === 0) {
     ui.cartFab.classList.remove("show");
     ui.cartList.innerHTML = '<div class="cart-empty">Seu carrinho está vazio.</div>';
-    ui.checkoutBtn.textContent = "Finalizar no WhatsApp";
+    ui.checkoutBtn.querySelector("[data-checkout-label]").textContent = "Finalizar no WhatsApp";
     ui.appCheckoutBtn.disabled = true;
     ui.removeUnavailableBtn.hidden = true;
     persistCart();
@@ -593,10 +596,15 @@ function renderCart() {
   }
 
   ui.cartFab.classList.add("show");
-  ui.checkoutBtn.textContent = hasUnavailable ? "Remova itens indisponíveis" : "Finalizar no WhatsApp";
+  ui.checkoutBtn.querySelector("[data-checkout-label]").textContent = hasUnavailable ? "Remova itens indisponíveis" : "Finalizar no WhatsApp";
   const itemMarkup = state.cart
-    .map((entry, index) => `
-      <article class="cart-item${isCartEntryUnavailable(entry, availabilityMap) ? " unavailable" : ""}">
+    .map((entry, index) => {
+      const item=state.items.find(candidate=>String(candidate.id)===String(entry.id)),photo=item?safeImageUrl(getItemPhotos(item)[0]||""):"";
+      const options=buildEntryOptionsText(entry);
+      return `
+      <article class="cart-item${isCartEntryUnavailable(entry, availabilityMap) ? " unavailable" : ""}${photo?" has-photo":""}">
+        ${photo?`<img class="cart-item-photo" src="${escapeHtml(photo)}" alt="${escapeHtml(entry.name)}" loading="lazy">`:""}
+        <div class="cart-item-content">
         <div class="cart-item-top">
           <h4 class="cart-item-title">${escapeHtml(entry.name)}</h4>
           <div class="cart-item-actions">
@@ -604,7 +612,7 @@ function renderCart() {
             <button type="button" class="ghost-btn" data-cart-remove="${index}">Remover</button>
           </div>
         </div>
-        ${buildEntryOptionsText(entry) ? `<p class="item-desc">${escapeHtml(buildEntryOptionsText(entry))}</p>` : ""}
+        ${options ? `<p class="cart-item-options"><strong>Alterações:</strong> ${escapeHtml(options)}</p>` : ""}
         ${entry.note ? `<p class="cart-item-note"><strong>Observação:</strong> ${escapeHtml(entry.note)}</p>` : ""}
         ${isCartEntryUnavailable(entry, availabilityMap) ? `<p class="cart-item-warning">${entry.replayNeedsReview?"Revise as opções: algum componente do pedido anterior está indisponível.":"Este item ficou indisponível e precisa ser removido do carrinho."}</p>` : ""}
         <div class="cart-item-bottom">
@@ -615,13 +623,14 @@ function renderCart() {
           </div>
           <span class="cart-item-price">${currency(Number(entry.price || 0) * entry.qty)}</span>
         </div>
+        </div>
       </article>
-    `)
+    `})
     .join("");
   const pooledMarkup = sellableGroups.map(group => {
     const components = [...group.components.entries()].map(([componentId, component]) => {const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId)),title=presentation?.display_name||component.member.component.name,photo=safeImageUrl(presentation?.photo_url_1||"");return `
       <div class="cart-pooled-component"><div class="cart-pooled-component-identity">${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<div><strong>${escapeHtml(title)}</strong>${presentation?.description?`<small>${escapeHtml(presentation.description)}</small>`:""}</div></div>
-        <div class="qty-wrap"><button type="button" class="qty-btn" data-pool-step="-1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" ${component.quantity<=0?"disabled":""}>−</button><span class="qty-val">${component.quantity}</span><button type="button" class="qty-btn" data-pool-step="1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" ${component.quantity>=component.maxQuantity?"disabled":""}>+</button></div>
+        <div class="qty-wrap"><button type="button" class="qty-btn" data-pool-step="-1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" aria-label="Remover ${escapeHtml(title)}" ${component.quantity<=0?"disabled":""}>−</button><span class="qty-val">${component.quantity}</span><button type="button" class="qty-btn" data-pool-step="1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" aria-label="Adicionar ${escapeHtml(title)}" title="${component.maxQuantity<=component.quantity&&component.member.component.tracks_stock!==false?"Limite de estoque atingido":"Adicionar"}" ${component.quantity>=component.maxQuantity?"disabled":""}>+</button></div>
       </div>`}).join("");
     const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),entitled=group.pack.franchise_mode==="shared"?group.allowance:[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0),allowance = `<p class="item-desc">No seu carrinho, você tem direito a ${entitled} ${escapeHtml(categoryName)}. Você já escolheu ${[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0)}; ainda pode escolher ${group.freeRemaining}.</p>`;
     const stockWarning=[...group.components.values()].some(component=>component.quantity>component.maxQuantity)?'<p class="cart-item-warning">A quantidade supera o estoque disponível.</p>':"";
@@ -2627,6 +2636,7 @@ function bindEvents() {
   });
 
   ui.closeCartBtn.addEventListener("click", closeCart);
+  ui.cartNote.addEventListener("input", persistCart);
   ui.cartBackdrop.addEventListener("click", (event) => {
     if (event.target === ui.cartBackdrop) {
       closeCart();

@@ -1,6 +1,6 @@
 {
-  "0": "bindEvents",
-  "1": "openPackageItemModal",
+  "0": "openPackageItemModal",
+  "1": "bindEvents",
   "2": "renderCart",
   "3": "js/index.js",
   "4": "backup_esquema_2026-04-04/index.js",
@@ -12,5 +12,5 @@
   "10": "renderMenu",
   "11": "init",
   "12": "scheduleVisibleReactLoop",
-  "14": "normalize"
+  "13": "normalize"
 }

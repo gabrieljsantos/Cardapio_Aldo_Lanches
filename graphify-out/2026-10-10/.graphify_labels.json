@@ -1,18 +1,1 @@
-{
-  "0": "bindEvents",
-  "1": "openPackageItemModal",
-  "2": "renderCart",
-  "3": "js/index.js",
-  "4": "backup_esquema_2026-04-04/index.js",
-  "5": "bindEvents",
-  "6": "openItemModal",
-  "7": "init",
-  "8": "renderMenu",
-  "9": "loadData",
-  "10": "renderMenu",
-  "11": "init",
-  "12": "scheduleVisibleReactLoop",
-  "13": "getItemPackageGroups",
-  "14": "normalize",
-  "15": "getVisibleItems"
-}
+{"0": "openPackageItemModal", "1": "bindEvents", "2": "renderCart", "3": "js/index.js", "4": "backup_esquema_2026-04-04/index.js", "5": "bindEvents", "6": "openItemModal", "7": "init", "8": "renderMenu", "9": "loadData", "10": "renderMenu", "11": "init", "12": "scheduleVisibleReactLoop", "13": "normalize"}

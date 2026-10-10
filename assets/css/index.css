@@ -1345,6 +1345,11 @@ body.modal-open {
   padding: 10px;
 }
 
+.cart-item.has-photo{display:grid;grid-template-columns:72px minmax(0,1fr);align-items:start;gap:12px}
+.cart-item-photo{width:72px;height:72px;object-fit:cover;border-radius:10px;background:var(--surface-soft)}
+.cart-item-content{min-width:0}
+.cart-item-options{margin:7px 0 0;color:var(--text);font-size:.86rem;line-height:1.4;font-weight:600}
+
 .cart-item.unavailable {
   border-color: #f4b48d;
   background: #fff7f2;
@@ -1414,6 +1419,7 @@ body.modal-open {
 .cart-pooled-component-identity{display:flex;align-items:center;gap:9px;min-width:0}
 .cart-pooled-component-identity img,.customer-component-order-line>img{width:48px;height:48px;object-fit:cover;border-radius:9px;background:var(--surface-soft);flex-shrink:0}
 .cart-pooled-component-identity>div{display:grid;gap:3px;min-width:0}.cart-pooled-component-identity small{color:var(--muted)}
+.cart-pooled-component .qty-wrap{flex-shrink:0}
 .customer-component-order-line{align-items:center}.customer-component-order-line>div{flex:1}
 
 .cart-item-price {
@@ -1641,6 +1647,11 @@ body.modal-open {
   .profile-page-card form{grid-template-columns:1fr}
   .profile-page-card form label,.profile-page-card form label:first-child,.profile-page-card form label:nth-child(3),.profile-page-card form label:nth-child(4),.profile-page-card form label:nth-child(5),.profile-page-card .account-actions{grid-column:1}
 }
+
+.cart-foot>.checkout-btn+.checkout-btn{margin-top:8px}
+.whatsapp-checkout-btn{display:flex;align-items:center;justify-content:center;gap:9px;background:#20b85a;color:#fff}
+.whatsapp-checkout-btn:hover:not(:disabled){background:#168c43;box-shadow:0 0 0 3px #20b85a33}
+.whatsapp-icon{width:20px;height:20px;flex:0 0 auto;fill:currentColor}
 
 @media (max-width: 480px) {
   .page-shell {

@@ -1,43 +1,103 @@
 {
   "communities": {
     "0": [
-      "assets_js_index_addtocart",
-      "assets_js_index_bindevents",
-      "assets_js_index_buildordermessage",
-      "assets_js_index_checkoutwhatsapp",
-      "assets_js_index_closecart",
-      "assets_js_index_copyordermessage",
+      "assets_js_index_buildentryoptionstext",
+      "assets_js_index_buildentrysignature",
+      "assets_js_index_buildorderpackagestate",
+      "assets_js_index_buildsearchcompositiontext",
+      "assets_js_index_closemodal",
+      "assets_js_index_createitemcard",
       "assets_js_index_currency",
+      "assets_js_index_escapehtml",
+      "assets_js_index_getitempackagegroups",
+      "assets_js_index_getitemphotos",
+      "assets_js_index_getitempricebreakdown",
+      "assets_js_index_getlegacycompositioncharge",
+      "assets_js_index_getpackagecompositioncharge",
+      "assets_js_index_getpackagedefaults",
+      "assets_js_index_isvalidimageurl",
+      "assets_js_index_loadcustomerorders",
+      "assets_js_index_lockpagescroll",
+      "assets_js_index_normalize",
+      "assets_js_index_opencart",
+      "assets_js_index_opencheckoutconfirmation",
+      "assets_js_index_openitemmodal",
+      "assets_js_index_openpackageitemmodal",
+      "assets_js_index_packagememberavailable",
+      "assets_js_index_packagequantitylimit",
+      "assets_js_index_renderactivecustomerorders",
+      "assets_js_index_renderbranch",
+      "assets_js_index_rendercustomerorders",
+      "assets_js_index_returntohomeview",
+      "assets_js_index_safeimageurl",
+      "assets_js_index_savependingcheckoutsnapshot",
+      "assets_js_index_showcustomerorderdetail",
+      "assets_js_index_synccartwithcurrentcatalog"
+    ],
+    "1": [
+      "assets_js_index_bindevents",
+      "assets_js_index_closecart",
+      "assets_js_index_closecheckoutconfirmation",
+      "assets_js_index_closecustomerorderdetail",
+      "assets_js_index_hascompleteorderprofile",
+      "assets_js_index_initializecustomerauth",
+      "assets_js_index_loadcustomerprofile",
+      "assets_js_index_openaccountdialog",
+      "assets_js_index_opencartedit",
+      "assets_js_index_opencustomerorders",
+      "assets_js_index_refreshdatanow",
+      "assets_js_index_renderaccountbutton",
+      "assets_js_index_resumecustomerpageintent",
+      "assets_js_index_resumependingappcheckout",
+      "assets_js_index_savecustomerprofile",
+      "assets_js_index_setstatus",
+      "assets_js_index_startappcheckout",
+      "assets_js_index_startcustomerlogin",
+      "assets_js_index_submitapporder",
+      "assets_js_index_switchcustomerpage",
+      "assets_js_index_unlockpagescroll"
+    ],
+    "2": [
+      "assets_js_index_addtocart",
+      "assets_js_index_adjustsellablegroup",
+      "assets_js_index_buildordermessage",
+      "assets_js_index_buildsellablegrouporderpayload",
+      "assets_js_index_checkoutwhatsapp",
+      "assets_js_index_copyordermessage",
       "assets_js_index_getcarttotals",
       "assets_js_index_getcurrentavailabilitymap",
-      "assets_js_index_getvisibleitems",
+      "assets_js_index_getsellablegrouptotals",
       "assets_js_index_iscartentryunavailable",
-      "assets_js_index_opencartedit",
+      "assets_js_index_packagecustomername",
       "assets_js_index_persistcart",
       "assets_js_index_removecartitem",
       "assets_js_index_removeunavailablecartitems",
       "assets_js_index_rendercart",
-      "assets_js_index_updatecartqty"
+      "assets_js_index_repeatcustomerorder",
+      "assets_js_index_restorependingcheckoutsnapshot",
+      "assets_js_index_savecartgroupadjustments",
+      "assets_js_index_updatecartqty",
+      "assets_js_index_updatesellableentitlementnotices"
     ],
-    "1": [
+    "3": [
       "assets_js_index",
-      "assets_js_index_bindviewportmetrics",
       "assets_js_index_computeactiveitemids",
+      "assets_js_index_customerphonefromform",
       "assets_js_index_db",
+      "assets_js_index_getcompositionstock",
       "assets_js_index_getdaykey",
-      "assets_js_index_getvisiblecards",
+      "assets_js_index_getuserdisplayname",
+      "assets_js_index_getvisibleitems",
       "assets_js_index_isgroupactive",
       "assets_js_index_linktypelabel",
       "assets_js_index_linkvaluelabel",
-      "assets_js_index_nextvisiblereactdelayms",
-      "assets_js_index_schedulevisiblereactloop",
+      "assets_js_index_order_stages",
+      "assets_js_index_splitcustomerphone",
       "assets_js_index_state",
       "assets_js_index_tominutes",
-      "assets_js_index_triggercardvisiblereact",
-      "assets_js_index_ui",
-      "assets_js_index_updateviewportmetrics"
+      "assets_js_index_ui"
     ],
-    "2": [
+    "4": [
       "backup_esquema_2026_04_04_index",
       "backup_esquema_2026_04_04_index_computeactiveitemids",
       "backup_esquema_2026_04_04_index_db",
@@ -51,33 +111,6 @@
       "backup_esquema_2026_04_04_index_state",
       "backup_esquema_2026_04_04_index_tominutes",
       "backup_esquema_2026_04_04_index_ui"
-    ],
-    "3": [
-      "assets_js_index_buildentrysignature",
-      "assets_js_index_buildsearchcompositiontext",
-      "assets_js_index_closemodal",
-      "assets_js_index_createitemcard",
-      "assets_js_index_escapehtml",
-      "assets_js_index_getitemphotos",
-      "assets_js_index_isvalidimageurl",
-      "assets_js_index_lockpagescroll",
-      "assets_js_index_openitemmodal",
-      "assets_js_index_returntohomeview",
-      "assets_js_index_safeimageurl",
-      "assets_js_index_unlockpagescroll"
-    ],
-    "4": [
-      "assets_js_index_bindrealtime",
-      "assets_js_index_init",
-      "assets_js_index_loaddata",
-      "assets_js_index_opencart",
-      "assets_js_index_refreshdatanow",
-      "assets_js_index_renderheader",
-      "assets_js_index_restorecart",
-      "assets_js_index_schedulerefreshfromrealtime",
-      "assets_js_index_setstatus",
-      "assets_js_index_setupheaderlogoscale",
-      "assets_js_index_startavailabilitypolling"
     ],
     "5": [
       "backup_esquema_2026_04_04_index_addtocart",
@@ -104,6 +137,18 @@
       "backup_esquema_2026_04_04_index_safeimageurl"
     ],
     "7": [
+      "assets_js_index_bindrealtime",
+      "assets_js_index_bindviewportmetrics",
+      "assets_js_index_init",
+      "assets_js_index_renderheader",
+      "assets_js_index_restorecart",
+      "assets_js_index_schedulerefreshfromrealtime",
+      "assets_js_index_setupheaderlogoscale",
+      "assets_js_index_startavailabilitypolling",
+      "assets_js_index_updateviewportmetrics"
+    ],
+    "8": [
+      "assets_js_index_applysearch",
       "assets_js_index_rendercategorynav",
       "assets_js_index_rendermenu",
       "assets_js_index_restorephotostate",
@@ -112,7 +157,16 @@
       "assets_js_index_setupmenureveal",
       "assets_js_index_startphotorotation"
     ],
-    "8": [
+    "9": [
+      "assets_js_index_buildcategorytree",
+      "assets_js_index_buildinlinecompositiontext",
+      "assets_js_index_loaddata",
+      "assets_js_index_loadoptionalpackagetable",
+      "assets_js_index_sortbyprioritythenname",
+      "assets_js_index_sortitemsbypriority",
+      "assets_js_index_sortpriorityvalue"
+    ],
+    "10": [
       "backup_esquema_2026_04_04_index_buildcategorytree",
       "backup_esquema_2026_04_04_index_renderbranch",
       "backup_esquema_2026_04_04_index_rendercategorynav",
@@ -120,133 +174,118 @@
       "backup_esquema_2026_04_04_index_sortbyprioritythenname",
       "backup_esquema_2026_04_04_index_sortpriorityvalue"
     ],
-    "9": [
-      "assets_js_index_buildcategorytree",
-      "assets_js_index_buildinlinecompositiontext",
-      "assets_js_index_renderbranch",
-      "assets_js_index_sortbyprioritythenname",
-      "assets_js_index_sortpriorityvalue"
-    ],
-    "10": [
+    "11": [
       "backup_esquema_2026_04_04_index_init",
       "backup_esquema_2026_04_04_index_loaddata",
       "backup_esquema_2026_04_04_index_renderheader",
       "backup_esquema_2026_04_04_index_setstatus",
       "backup_esquema_2026_04_04_index_setupheaderlogoscale"
     ],
-    "11": [
-      "assets_js_index_applysearch",
-      "assets_js_index_normalize"
-    ],
     "12": [
+      "assets_js_index_getvisiblecards",
+      "assets_js_index_nextvisiblereactdelayms",
+      "assets_js_index_schedulevisiblereactloop",
+      "assets_js_index_triggercardvisiblereact"
+    ],
+    "13": [
       "backup_esquema_2026_04_04_index_applysearch",
       "backup_esquema_2026_04_04_index_normalize"
     ]
   },
   "cohesion": {
-    "0": 0.21323529411764705,
-    "1": 0.18333333333333332,
-    "2": 0.21794871794871795,
-    "3": 0.22727272727272727,
-    "4": 0.2727272727272727,
+    "0": 0.13709677419354838,
+    "1": 0.23333333333333334,
+    "2": 0.18947368421052632,
+    "3": 0.16666666666666666,
+    "4": 0.21794871794871795,
     "5": 0.26666666666666666,
     "6": 0.3111111111111111,
-    "7": 0.2857142857142857,
-    "8": 0.4,
-    "9": 0.4,
-    "10": 0.5,
-    "11": 1.0,
-    "12": 1.0
+    "7": 0.25,
+    "8": 0.25,
+    "9": 0.3333333333333333,
+    "10": 0.4,
+    "11": 0.5,
+    "12": 0.5,
+    "13": 1.0
   },
   "gods": [
     {
+      "id": "assets_js_index_bindevents",
+      "label": "bindEvents()",
+      "degree": 27
+    },
+    {
       "id": "assets_js_index_rendercart",
       "label": "renderCart()",
-      "degree": 14
+      "degree": 27
+    },
+    {
+      "id": "assets_js_index_openpackageitemmodal",
+      "label": "openPackageItemModal()",
+      "degree": 19
     },
     {
       "id": "assets_js_index_openitemmodal",
       "label": "openItemModal()",
-      "degree": 13
+      "degree": 16
     },
     {
-      "id": "assets_js_index_rendermenu",
-      "label": "renderMenu()",
-      "degree": 13
-    },
-    {
-      "id": "assets_js_index_bindevents",
-      "label": "bindEvents()",
-      "degree": 12
+      "id": "assets_js_index_submitapporder",
+      "label": "submitAppOrder()",
+      "degree": 16
     },
     {
       "id": "assets_js_index_init",
       "label": "init()",
+      "degree": 14
+    },
+    {
+      "id": "assets_js_index_rendermenu",
+      "label": "renderMenu()",
+      "degree": 14
+    },
+    {
+      "id": "assets_js_index_startappcheckout",
+      "label": "startAppCheckout()",
+      "degree": 13
+    },
+    {
+      "id": "assets_js_index_opencheckoutconfirmation",
+      "label": "openCheckoutConfirmation()",
       "degree": 12
     },
     {
-      "id": "backup_esquema_2026_04_04_index_openitemmodal",
-      "label": "openItemModal()",
+      "id": "assets_js_index_renderbranch",
+      "label": "renderBranch()",
       "degree": 12
-    },
-    {
-      "id": "assets_js_index_createitemcard",
-      "label": "createItemCard()",
-      "degree": 10
-    },
-    {
-      "id": "backup_esquema_2026_04_04_index_bindevents",
-      "label": "bindEvents()",
-      "degree": 10
-    },
-    {
-      "id": "backup_esquema_2026_04_04_index_rendercart",
-      "label": "renderCart()",
-      "degree": 9
-    },
-    {
-      "id": "backup_esquema_2026_04_04_index_init",
-      "label": "init()",
-      "degree": 8
     }
   ],
   "surprises": [
     {
       "source": "bindEvents()",
-      "target": "applySearch()",
+      "target": "copyOrderMessage()",
+      "source_files": [
+        "assets/js/index.js",
+        "assets/js/index.js"
+      ],
+      "confidence": "INFERRED",
+      "relation": "indirect_call",
+      "note": "Bridges community 1 → community 2"
+    },
+    {
+      "source": "buildOrderMessage()",
+      "target": "buildEntryOptionsText()",
       "source_files": [
         "assets/js/index.js",
         "assets/js/index.js"
       ],
       "confidence": "EXTRACTED",
       "relation": "calls",
-      "note": "Bridges community 0 → community 11"
+      "note": "Bridges community 0 → community 2"
     },
     {
-      "source": "bindEvents()",
-      "target": "closeModal()",
-      "source_files": [
-        "assets/js/index.js",
-        "assets/js/index.js"
-      ],
-      "confidence": "EXTRACTED",
-      "relation": "calls",
-      "note": "Bridges community 0 → community 3"
-    },
-    {
-      "source": "bindEvents()",
-      "target": "openCart()",
-      "source_files": [
-        "assets/js/index.js",
-        "assets/js/index.js"
-      ],
-      "confidence": "EXTRACTED",
-      "relation": "calls",
-      "note": "Bridges community 0 → community 4"
-    },
-    {
-      "source": "getVisibleItems()",
-      "target": "computeActiveItemIds()",
+      "source": "submitAppOrder()",
+      "target": "buildEntryOptionsText()",
       "source_files": [
         "assets/js/index.js",
         "assets/js/index.js"
@@ -256,42 +295,58 @@
       "note": "Bridges community 0 → community 1"
     },
     {
-      "source": "renderMenu()",
-      "target": "getVisibleItems()",
+      "source": "createItemCard()",
+      "target": "buildInlineCompositionText()",
       "source_files": [
         "assets/js/index.js",
         "assets/js/index.js"
       ],
       "confidence": "EXTRACTED",
       "relation": "calls",
-      "note": "Bridges community 0 → community 7"
+      "note": "Bridges community 0 → community 9"
+    },
+    {
+      "source": "applySearch()",
+      "target": "normalize()",
+      "source_files": [
+        "assets/js/index.js",
+        "assets/js/index.js"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "note": "Bridges community 0 → community 8"
     }
   ],
   "questions": [
     {
       "type": "bridge_node",
-      "question": "Why does `renderCart()` connect `Community 0` to `Community 1`, `Community 3`, `Community 4`?",
-      "why": "High betweenness centrality (0.005) - this node is a cross-community bridge."
+      "question": "Why does `bindEvents()` connect `bindEvents` to `openPackageItemModal`, `renderCart`, `js/index.js`, `init`, `renderMenu`?",
+      "why": "High betweenness centrality (0.010) - this node is a cross-community bridge."
     },
     {
       "type": "bridge_node",
-      "question": "Why does `renderMenu()` connect `Community 7` to `Community 0`, `Community 1`, `Community 4`, `Community 9`, `Community 11`?",
-      "why": "High betweenness centrality (0.005) - this node is a cross-community bridge."
+      "question": "Why does `renderCart()` connect `renderCart` to `openPackageItemModal`, `bindEvents`, `js/index.js`, `init`?",
+      "why": "High betweenness centrality (0.010) - this node is a cross-community bridge."
     },
     {
       "type": "bridge_node",
-      "question": "Why does `openItemModal()` connect `Community 3` to `Community 0`, `Community 1`, `Community 4`?",
+      "question": "Why does `openPackageItemModal()` connect `openPackageItemModal` to `bindEvents`, `renderCart`, `js/index.js`?",
       "why": "High betweenness centrality (0.004) - this node is a cross-community bridge."
     },
     {
       "type": "verify_inferred",
-      "question": "Are the 3 inferred relationships involving `bindEvents()` (e.g. with `closeCart()` and `copyOrderMessage()`) actually correct?",
-      "why": "`bindEvents()` has 3 INFERRED edges - model-reasoned connections that need verification."
+      "question": "Are the 9 inferred relationships involving `bindEvents()` (e.g. with `closeCart()` and `closeCheckoutConfirmation()`) actually correct?",
+      "why": "`bindEvents()` has 9 INFERRED edges - model-reasoned connections that need verification."
     },
     {
       "type": "isolated_nodes",
-      "question": "What connects `db`, `state`, `ui` to the rest of the system?",
-      "why": "6 weakly-connected nodes found - possible documentation gaps or missing edges."
+      "question": "What connects `db`, `ORDER_STAGES`, `state` to the rest of the system?",
+      "why": "7 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `openPackageItemModal` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.13709677419354838 - nodes in this community are weakly interconnected."
     }
   ]
 }
