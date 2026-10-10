@@ -7,6 +7,7 @@ const APP_CHECKOUT_INTENT_KEY = "smart-store-hub-app-checkout-intent";
 const APP_CHECKOUT_SNAPSHOT_KEY = "smart-store-hub-app-checkout-snapshot-v1";
 let checkoutResumeInFlight = false;
 const ORDER_STAGES = [
+  { key: "pending_confirmation", label: "Aguardando confirmação" },
   { key: "received", label: "Pedido feito" },
   { key: "confirmed", label: "Pedido confirmado" },
   { key: "production", label: "Em preparação" },
@@ -22,6 +23,10 @@ const state = {
   items: [],
   compositions: [],
   associations: [],
+  ingredientPackages: [],
+  packageComponents: [],
+  itemPackages: [],
+  itemComponentConfigs: [],
   groups: [],
   groupAssociations: [],
   setup: null,
@@ -336,6 +341,7 @@ function restoreCart() {
         optionsText: String(entry.optionsText || ""),
         note: String(entry.note || ""),
         modState: entry.modState && typeof entry.modState === "object" ? entry.modState : {},
+        packageState: entry.packageState && typeof entry.packageState === "object" ? entry.packageState : {},
         qty: Math.max(1, Number(entry.qty || 1))
       }))
       .filter((entry) => entry.id !== null && entry.id !== undefined);
@@ -448,18 +454,23 @@ function addToCart(item, qty, unitPrice = Number(item.price || 0), optionsText =
       optionsText,
       note: "",
       modState: {},
+      packageState: {},
       qty
     });
   }
   renderCart();
 }
 
-function buildEntrySignature(itemId, selectedState, note, unitPrice) {
+function buildEntrySignature(itemId, selectedState, note, unitPrice, packageState = {}) {
   const statePart = Object.entries(selectedState || {})
     .sort(([a], [b]) => String(a).localeCompare(String(b)))
     .map(([k, v]) => `${k}:${v}`)
     .join("|");
-  return `${itemId}::${statePart}::${String(note || "").trim()}::${Number(unitPrice || 0).toFixed(2)}`;
+  const packagePart = Object.keys(packageState || {}).sort().map(packageId => {
+    const values = packageState[packageId] || {};
+    return `${packageId}:${Object.keys(values).sort().map(componentId => `${componentId}=${values[componentId]}`).join(",")}`;
+  }).join("|");
+  return `${itemId}::${statePart}::${packagePart}::${String(note || "").trim()}::${Number(unitPrice || 0).toFixed(2)}`;
 }
 
 function updateCartQty(index, delta) {
@@ -557,16 +568,31 @@ function syncCartWithCurrentCatalog() {
     const item = state.items.find((candidate) => String(candidate.id) === String(entry.id));
     if (!item) return;
     let unitPrice = Number(item.price || 0);
-    state.associations.filter((association) => association.owner_id === item.id).forEach((association) => {
-      const component = state.compMap[association.composition_id];
-      if (!component) return;
-      const defaultQuantity = Math.max(0, Number(association.link_value || 0));
-      let selected = Math.max(0, Number(entry.modState?.[association.id] ?? defaultQuantity));
-      if (association.link_type === "delta") selected = Math.min(2, selected);
-      else if (association.link_type === "complementary") selected = Math.min(1, selected);
-      else if (association.link_type === "scalable") selected = Math.min(Number(component.max_quantity ?? 4), selected);
-      unitPrice += (selected - defaultQuantity) * Number(component.price || 0);
-    });
+    const packageGroups = getItemPackageGroups(item.id);
+    if (packageGroups.length) {
+      for (const group of packageGroups) {
+        const packageId = String(group.pack.id), saved = entry.packageState?.[packageId] || {};
+        for (const member of group.members) {
+          const componentId = String(member.row.composition_id);
+          const standard = Math.max(0, Number(member.config.default_quantity || 0));
+          const selected = Math.max(0, Number(saved[componentId] ?? standard));
+          const free = Math.max(0, Number(member.config.free_allowance || 0));
+          const delta = Math.max(0, selected - free) - Math.max(0, standard - free);
+          unitPrice += delta * Number(member.component.price || 0);
+        }
+      }
+    } else {
+      state.associations.filter((association) => association.owner_id === item.id).forEach((association) => {
+        const component = state.compMap[association.composition_id];
+        if (!component) return;
+        const defaultQuantity = Math.max(0, Number(association.link_value || 0));
+        let selected = Math.max(0, Number(entry.modState?.[association.id] ?? defaultQuantity));
+        if (association.link_type === "delta") selected = Math.min(2, selected);
+        else if (association.link_type === "complementary") selected = Math.min(1, selected);
+        else if (association.link_type === "scalable") selected = Math.min(Number(component.max_quantity ?? 4), selected);
+        unitPrice += (selected - defaultQuantity) * Number(component.price || 0);
+      });
+    }
     entry.name = item.name;
     entry.price = Math.max(0, unitPrice);
   });
@@ -594,7 +620,8 @@ async function submitAppOrder() {
       quantity: Number(entry.qty),
       notes: String(entry.note || ""),
       options_text: String(entry.optionsText || ""),
-      mod_state: entry.modState && typeof entry.modState === "object" ? entry.modState : {}
+      mod_state: entry.modState && typeof entry.modState === "object" ? entry.modState : {},
+      package_state: entry.packageState && typeof entry.packageState === "object" ? entry.packageState : {}
     }));
     const { data: orderId, error } = await db.rpc("submit_app_order", {
       p_items: payload,
@@ -996,6 +1023,67 @@ function computeActiveItemIds(groups, groupAssocs) {
   return active;
 }
 
+function getCompositionStock(item) {
+  if (item.stock_mode !== "composition") return Math.max(0, Number(item.stock || 0));
+
+  const linkedPackages = state.itemPackages
+    .filter((link) => String(link.item_id) === String(item.id))
+    .map((link) => ({
+      link,
+      pack: state.ingredientPackages.find((pack) => String(pack.id) === String(link.package_id))
+    }))
+    .filter((entry) => entry.pack && entry.pack.is_active !== false);
+
+  // Preserve o saldo legado enquanto um item ainda não foi migrado para grupos.
+  if (!linkedPackages.length) return Math.max(0, Number(item.stock || 0));
+
+  const capacities = [];
+  linkedPackages.forEach(({ link, pack }) => {
+    const rule = pack.availability_rule || "optional_warn_only";
+    if (rule !== "all_positive_defaults_required" && rule !== "one_available_with_priority_fallback") return;
+
+    const members = state.packageComponents
+      .filter((row) => String(row.package_id) === String(pack.id))
+      .map((row) => {
+        const config = state.itemComponentConfigs.find((entry) =>
+          String(entry.item_id) === String(item.id)
+          && String(entry.package_id) === String(pack.id)
+          && String(entry.composition_id) === String(row.composition_id)
+        );
+        const component = state.compMap[row.composition_id];
+        return { row, config, component };
+      })
+      .filter(({ config }) => config?.is_enabled !== false)
+      .sort((a, b) => Number(a.row.sort_priority || 0) - Number(b.row.sort_priority || 0));
+
+    const componentCapacity = ({ config, component }, requireOne = false) => {
+      if (!component || component.is_active === false) return 0;
+      if (component?.tracks_stock === false) return Number.POSITIVE_INFINITY;
+      const quantity = Math.max(0, Number(config?.default_quantity || 0));
+      const perUnit = Math.max(0, Number(config?.consumption_per_unit ?? 1));
+      if (perUnit <= 0) return Number.POSITIVE_INFINITY;
+      const needed = (requireOne ? Math.max(1, quantity) : quantity) * perUnit;
+      if (needed <= 0) return Number.POSITIVE_INFINITY;
+      return Math.floor(Math.max(0, Number(component.stock || 0)) / needed);
+    };
+
+    if (rule === "all_positive_defaults_required") {
+      const required = members.filter(({ config }) => Number(config?.default_quantity || 0) > 0);
+      if (required.length) capacities.push(Math.min(...required.map(componentCapacity)));
+      return;
+    }
+
+    // Fallback: um componente do grupo basta. O estoque disponível nas
+    // alternativas, na prioridade definida pelo administrador, é somado.
+    if (rule === "one_available_with_priority_fallback") {
+      const alternatives = members.map((member) => componentCapacity(member, true)).filter((value) => value > 0);
+      capacities.push(alternatives.length ? alternatives.reduce((sum, value) => sum + value, 0) : 0);
+    }
+  });
+
+  return capacities.length ? Math.max(0, Math.min(...capacities)) : Math.max(0, Number(item.stock || 0));
+}
+
 function getVisibleItems(items, groups, groupAssocs) {
   const itemsInAnyGroup = new Set(groupAssocs.map((assoc) => assoc.item_id));
   const hasGroups = groups.length > 0;
@@ -1005,7 +1093,7 @@ function getVisibleItems(items, groups, groupAssocs) {
     .map((item) => {
       const inGroup = hasGroups && itemsInAnyGroup.has(item.id);
       const groupInactive = inGroup && !activeSet.has(item.id);
-      const effectiveStock = groupInactive ? 0 : Number(item.stock || 0);
+      const effectiveStock = groupInactive ? 0 : getCompositionStock(item);
       return {
         ...item,
         __groupInactive: groupInactive,
@@ -1601,7 +1689,181 @@ function applySearch() {
   }
 }
 
+function getItemPackageGroups(itemId) {
+  return state.itemPackages
+    .filter(link => String(link.item_id) === String(itemId))
+    .sort((a, b) => Number(a.sort_priority || 0) - Number(b.sort_priority || 0))
+    .map(link => {
+      const pack = state.ingredientPackages.find(entry => String(entry.id) === String(link.package_id));
+      if (!pack || pack.is_active === false) return null;
+      const members = state.packageComponents
+        .filter(row => String(row.package_id) === String(pack.id))
+        .sort((a, b) => Number(a.sort_priority || 0) - Number(b.sort_priority || 0))
+        .map(row => ({
+          row,
+          component: state.compMap[row.composition_id],
+          config: state.itemComponentConfigs.find(config =>
+            String(config.item_id) === String(itemId)
+            && String(config.package_id) === String(pack.id)
+            && String(config.composition_id) === String(row.composition_id)
+          ) || { default_quantity: 0, free_allowance: 0, max_quantity: 4, consumption_per_unit: 1, is_enabled: true }
+        }))
+        .filter(member => member.component && member.config.is_enabled !== false && member.component.is_active !== false);
+      return { link, pack, members };
+    })
+    .filter(group => group && group.members.length);
+}
+
+function packageMemberAvailable(member, quantity = 1) {
+  if (!member.component || member.component.is_active === false) return false;
+  if (member.component.tracks_stock === false) return true;
+  const perUnit = Math.max(1, Number(member.config.consumption_per_unit || 1));
+  return Number(member.component.stock || 0) >= Math.max(1, Number(quantity || 1)) * perUnit;
+}
+
+function openPackageItemModal(item, options, groups) {
+  const editIndex = Number.isInteger(options.editIndex) ? options.editIndex : null;
+  const cartEntry = editIndex !== null ? state.cart[editIndex] : null;
+  state.modalQty = cartEntry?.qty || 1;
+  const isUnavailable = Number(item.__effectiveStock ?? item.stock ?? 0) === 0;
+  const photos = getItemPhotos(item), mainPhoto = safeImageUrl(photos[0] || "");
+  const hasMainPhoto = Boolean(mainPhoto), safeName = escapeHtml(item.name);
+  const description = String(item.description || "").trim(), safeDescription = escapeHtml(description);
+  const packageState = {};
+  const fallbackGroup = group => group.pack.availability_rule === "one_available_with_priority_fallback" || group.pack.kind === "single_required";
+
+  for (const group of groups) {
+    const packageId = String(group.pack.id), stored = cartEntry?.packageState?.[packageId] || {};
+    packageState[packageId] = {};
+    if (fallbackGroup(group)) {
+      const saved = group.members.find(member => Number(stored[member.row.composition_id]) > 0 && packageMemberAvailable(member));
+      const standard = group.members.find(member => Number(member.config.default_quantity) > 0 && packageMemberAvailable(member));
+      const choice = saved || standard || null;
+      group.members.forEach(member => { packageState[packageId][member.row.composition_id] = member === choice ? 1 : 0; });
+      continue;
+    }
+    group.members.forEach(member => {
+      const key = String(member.row.composition_id), standard = Math.max(0, Number(member.config.default_quantity || 0));
+      const saved = Object.prototype.hasOwnProperty.call(stored, key) ? Number(stored[key]) : standard;
+      packageState[packageId][key] = packageMemberAvailable(member, Math.max(saved, standard)) ? saved : 0;
+    });
+  }
+
+  const getSelection = () => {
+    let extra = 0;
+    const labels = [], selected = {};
+    for (const group of groups) {
+      const packageId = String(group.pack.id), values = packageState[packageId] || {};
+      selected[packageId] = {};
+      const fallback = fallbackGroup(group);
+      const chosen = fallback ? group.members.find(member => Number(values[member.row.composition_id]) > 0) : null;
+      const defaultMember = fallback ? group.members.find(member => Number(member.config.default_quantity) > 0) : null;
+      if (fallback && chosen && defaultMember && chosen !== defaultMember) {
+        labels.push(`Substituir ${defaultMember.component.name} por ${chosen.component.name}`);
+      }
+      if (fallback && !chosen) return { valid: false, message: `Escolha uma opção disponível em ${group.pack.name}.` };
+      for (const member of group.members) {
+        const componentId = String(member.row.composition_id);
+        const standard = Math.max(0, Number(member.config.default_quantity || 0));
+        const max = Math.max(0, Number(member.config.max_quantity ?? member.component.max_quantity ?? 4));
+        const value = fallback ? (member === chosen ? 1 : 0) : Math.min(max, Math.max(0, Number(values[componentId] || 0)));
+        values[componentId] = value;
+        selected[packageId][componentId] = value;
+        const free = Math.max(0, Number(member.config.free_allowance || 0));
+        const paidDelta = Math.max(0, value - free) - Math.max(0, standard - free);
+        extra += paidDelta * Number(member.component.price || 0);
+        if (fallback || value === standard) continue;
+        const difference = value - standard;
+        if (difference > 0) labels.push(`Adicionar ${difference > 1 ? `${difference}x ` : ""}${member.component.name}`);
+        else labels.push(`Remover ${-difference > 1 ? `${-difference}x ` : ""}${member.component.name}`);
+      }
+      const selectedCount = Object.values(selected[packageId]).filter(value => Number(value) > 0).length;
+      if (fallback && selectedCount !== 1) {
+        return { valid: false, message: `Escolha exatamente uma opção em ${group.pack.name}.` };
+      }
+      if (group.pack.min_selections != null && selectedCount < Number(group.pack.min_selections)) {
+        return { valid: false, message: `Escolha pelo menos ${group.pack.min_selections} opção(ões) em ${group.pack.name}.` };
+      }
+      if (group.pack.max_selections != null && selectedCount > Number(group.pack.max_selections)) {
+        return { valid: false, message: `Escolha no máximo ${group.pack.max_selections} opção(ões) em ${group.pack.name}.` };
+      }
+    }
+    return { valid: true, extra, optionsText: labels.join(" | "), packageState: selected };
+  };
+
+  const modalHead = hasMainPhoto
+    ? `<div class="modal-head"><img class="modal-photo" src="${mainPhoto}" alt="${safeName}"><button class="modal-close" id="modalClose" aria-label="Fechar">X</button></div>`
+    : `<div class="modal-head no-photo"><button class="modal-close" id="modalClose" aria-label="Fechar">X</button></div>`;
+  const groupsMarkup = groups.map(group => {
+    const packageId = String(group.pack.id), fallback = fallbackGroup(group);
+    const warning = group.pack.availability_rule === "optional_warn_only" && group.members.some(member => !packageMemberAvailable(member))
+      ? `<small class="package-stock-warning">Algumas opções estão indisponíveis.</small>` : "";
+    const rows = group.members.map(member => {
+      const compositionId = String(member.row.composition_id), available = packageMemberAvailable(member);
+      const value = Number(packageState[packageId][compositionId] || 0),
+        standard = Number(member.config.default_quantity || 0),
+        max = Math.min(Number(member.config.max_quantity ?? member.component.max_quantity ?? 4), Number(member.component.max_quantity ?? 4), member.component.tracks_stock === false ? Number.POSITIVE_INFINITY : Math.floor(Number(member.component.stock || 0) / Math.max(1, Number(member.config.consumption_per_unit || 1))));
+      const price = Number(member.component.price || 0) > 0 ? `<small>${currency(member.component.price)}</small>` : "";
+      if (fallback) {
+        const checked = value === 1;
+        return `<label class="package-choice ${available ? "" : "is-unavailable"}"><input type="radio" name="package-${escapeHtml(packageId)}" data-package-action="choose" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${checked ? "checked" : ""} ${available ? "" : "disabled"}><span><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? "<small>Indisponível</small>" : ""}</span></label>`;
+      }
+      return `<div class="comp-row package-component-choice ${available ? "" : "is-unavailable"}"><div><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? `<small>${group.pack.availability_rule === "optional_warn_only" ? "Indisponível" : "Sem estoque"}</small>` : ""}</div><div class="comp-actions"><div class="qty-wrap"><button type="button" class="qty-btn" data-package-action="step" data-step="-1" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}">−</button><span class="qty-val">${value}</span><button type="button" class="qty-btn" data-package-action="step" data-step="1" data-max="${max}" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${!available ? "disabled" : ""}>+</button></div></div></div>`;
+    }).join("");
+    return `<section class="package-customer-group"><h4>${escapeHtml(group.pack.name)}</h4>${warning}${rows}</section>`;
+  }).join("");
+
+  ui.modalBody.innerHTML = `<article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item"><div class="modal-scroll">${modalHead}<div class="modal-content"><h3 class="modal-title">${safeName}</h3><p class="modal-price" id="modalDynamicPrice">${currency(item.price)}</p>${description ? `<p class="modal-text">${safeDescription}</p>` : ""}${isUnavailable ? '<p class="item-stock">Item indisponível no momento.</p>' : ""}<div class="comp-wrap"><button class="comp-head" id="compToggleBtn">Modificar</button><div class="comp-body" id="compBody"><div id="compInteractive">${groupsMarkup}</div></div></div><div class="obs-section"><div class="obs-title">Observação do item</div><textarea id="modalNote" class="modal-note" rows="3" placeholder="Observação (opcional)">${escapeHtml(cartEntry?.note || "")}</textarea></div></div></div>${!isUnavailable ? `<div class="modal-footer"><div class="modal-actions"><div class="qty-wrap"><button type="button" class="qty-btn" id="modalQtyMinus">-</button><span class="qty-val" id="modalQtyVal">1</span><button type="button" class="qty-btn" id="modalQtyPlus">+</button></div><button type="button" class="ghost-btn" id="modalViewCartBtn">Ver carrinho</button><button type="button" class="add-btn" id="modalAddBtn">${editIndex !== null ? "Salvar alterações" : "Adicionar ao carrinho"}</button></div></div>` : ""}</article>`;
+  ui.modal.classList.add("show");lockPageScroll();
+  document.getElementById("modalClose")?.addEventListener("click", closeModal);
+  document.getElementById("compToggleBtn")?.addEventListener("click", () => {
+    const compBody=document.getElementById("compBody"),modalScroll=ui.modalBody.querySelector(".modal-scroll");
+    if(!compBody||!modalScroll)return;const showing=compBody.classList.toggle("show");modalScroll.classList.toggle("mod-scroll-enabled",showing);
+  });
+  const compInteractive=document.getElementById("compInteractive"),dynamicPrice=document.getElementById("modalDynamicPrice");
+  const refreshPackagePrice=()=>{const selection=getSelection();if(dynamicPrice&&selection.valid)dynamicPrice.textContent=currency(Math.max(0,Number(item.price||0)+selection.extra));};
+  compInteractive?.addEventListener("change",event=>{
+    const input=event.target.closest('[data-package-action="choose"]');if(!input||!input.checked)return;
+    const packageId=input.dataset.packageId,componentId=input.dataset.componentId;
+    for(const group of groups){if(String(group.pack.id)!==packageId)continue;for(const member of group.members)packageState[packageId][String(member.row.composition_id)]=String(member.row.composition_id)===componentId?1:0;}
+    refreshPackagePrice();
+  });
+  compInteractive?.addEventListener("click",event=>{
+    const button=event.target.closest('[data-package-action="step"]');if(!button)return;
+    const packageId=button.dataset.packageId,componentId=button.dataset.componentId;
+    const group=groups.find(entry=>String(entry.pack.id)===packageId),member=group?.members.find(entry=>String(entry.row.composition_id)===componentId);
+    const perUnit=Math.max(1,Number(member?.config.consumption_per_unit||1));
+    const stockLimit=member?.component.tracks_stock===false?Number.POSITIVE_INFINITY:Math.floor(Math.max(0,Number(member?.component.stock||0))/(perUnit*Math.max(1,Number(state.modalQty||1))));
+    const max=Math.max(0,Math.min(Number(button.dataset.max??4),stockLimit));
+    packageState[packageId][componentId]=Math.min(max,Math.max(0,Number(packageState[packageId][componentId]||0)+Number(button.dataset.step||0)));
+    const value=packageState[packageId][componentId],controls=button.parentElement;
+    controls.querySelector(".qty-val").textContent=String(value);
+    controls.querySelector('[data-step="-1"]').disabled=value<=0;
+    controls.querySelector('[data-step="1"]').disabled=value>=max;
+    refreshPackagePrice();
+  });
+  const qtyVal=document.getElementById("modalQtyVal");
+  document.getElementById("modalQtyMinus")?.addEventListener("click",()=>{state.modalQty=Math.max(1,state.modalQty-1);qtyVal.textContent=String(state.modalQty)});
+  document.getElementById("modalQtyPlus")?.addEventListener("click",()=>{state.modalQty+=1;qtyVal.textContent=String(state.modalQty)});
+  document.getElementById("modalViewCartBtn")?.addEventListener("click",()=>{closeModal();openCart()});
+  document.getElementById("modalAddBtn")?.addEventListener("click",()=>{
+    const selection=getSelection();if(!selection.valid){setStatus(selection.message,"err");return}
+    const note=(document.getElementById("modalNote")?.value||"").trim(),unitPrice=Math.max(0,Number(item.price||0)+selection.extra);
+    const signature=buildEntrySignature(item.id,{},note,unitPrice,selection.packageState);
+    const payload={signature,name:item.name,price:unitPrice,optionsText:selection.optionsText,note,modState:{},packageState:selection.packageState,qty:state.modalQty};
+    if(editIndex!==null){state.cart[editIndex]={...state.cart[editIndex],...payload};renderCart();closeModal();openCart();return}
+    const current=state.cart.find(entry=>entry.signature===signature);if(current)current.qty+=state.modalQty;else state.cart.push({id:item.id,...payload});
+    renderCart();returnToHomeView();
+  });
+  refreshPackagePrice();
+}
+
 function openItemModal(item, options = {}) {
+  const packageGroups = getItemPackageGroups(item.id);
+  if (packageGroups.length) {
+    openPackageItemModal(item, options, packageGroups);
+    return;
+  }
   const editIndex = Number.isInteger(options.editIndex) ? options.editIndex : null;
   const cartEntry = editIndex !== null ? state.cart[editIndex] : null;
   state.modalQty = cartEntry?.qty || 1;
@@ -2128,6 +2390,10 @@ function bindRealtime() {
     "items",
     "composition",
     "item_composition_association",
+    "ingredient_package",
+    "package_component",
+    "item_package",
+    "item_component_config",
     "item_group",
     "item_group_association"
   ];
@@ -2148,6 +2414,15 @@ function bindRealtime() {
   state.realtimeChannel = channel;
 }
 
+async function loadOptionalPackageTable(table) {
+  const { data, error } = await db.from(table).select("*");
+  if (error) {
+    console.warn(`Tabela ${table} indisponível; mantendo cálculo legado de disponibilidade.`, error.message);
+    return [];
+  }
+  return data || [];
+}
+
 async function loadData() {
   const [
     setupRes,
@@ -2155,6 +2430,10 @@ async function loadData() {
     itemsRes,
     compositionRes,
     associationRes,
+    ingredientPackages,
+    packageComponents,
+    itemPackages,
+    itemComponentConfigs,
     groupsRes,
     groupAssocRes
   ] = await Promise.all([
@@ -2163,6 +2442,10 @@ async function loadData() {
     db.from("items").select("*"),
     db.from("composition").select("*"),
     db.from("item_composition_association").select("*"),
+    loadOptionalPackageTable("ingredient_package"),
+    loadOptionalPackageTable("package_component"),
+    loadOptionalPackageTable("item_package"),
+    loadOptionalPackageTable("item_component_config"),
     db.from("item_group").select("*"),
     db.from("item_group_association").select("*")
   ]);
@@ -2185,6 +2468,10 @@ async function loadData() {
   state.items = sortByPriorityThenName(itemsRes.data || []);
   state.compositions = compositionRes.data || [];
   state.associations = associationRes.data || [];
+  state.ingredientPackages = ingredientPackages;
+  state.packageComponents = packageComponents;
+  state.itemPackages = itemPackages;
+  state.itemComponentConfigs = itemComponentConfigs;
   state.groups = groupsRes.data || [];
   state.groupAssociations = groupAssocRes.data || [];
 
