@@ -1,17 +1,17 @@
 # Graph Report - Cardapio_Aldo_Lanches  (2026-10-10)
 
 ## Corpus Check
-- 3 files · ~95,159 words
+- 3 files · ~95,242 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 4 file(s) not represented in the graph (top: .css 2, (none) 1, .cdr 1)
 
 ## Summary
-- 157 nodes · 459 edges · 14 communities (13 shown, 1 thin omitted)
+- 157 nodes · 461 edges · 14 communities (13 shown, 1 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 17 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3b0256f0`
+- Built from commit: `35e9af30`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -97,8 +97,8 @@ Cohesion: 0.25
 Nodes (8): applySearch(), renderCategoryNav(), renderMenu(), restorePhotoState(), rotateCardPhotos(), savePhotoState(), setupMenuReveal(), startPhotoRotation()
 
 ### Community 9 - "loadData"
-Cohesion: 0.29
-Nodes (7): buildCategoryTree(), buildInlineCompositionText(), loadData(), loadOptionalPackageTable(), sortByPriorityThenName(), sortItemsAlphabetically(), sortPriorityValue()
+Cohesion: 0.33
+Nodes (7): buildCategoryTree(), buildInlineCompositionText(), loadData(), loadOptionalPackageTable(), sortByPriorityThenName(), sortItemsByPriority(), sortPriorityValue()
 
 ### Community 10 - "renderMenu"
 Cohesion: 0.40

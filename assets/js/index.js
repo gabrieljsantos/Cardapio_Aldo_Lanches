@@ -400,6 +400,40 @@ function buildOrderPackageState(entry) {
   return result;
 }
 
+function buildEntryOptionsText(entry) {
+  const associatedGroups=getItemPackageGroups(entry.id),groups=associatedGroups.filter(group=>group.pack.is_sellable!==true),labels=[];
+  if(groups.length){
+    const previous=String(entry.optionsText||"").split("|").map(value=>value.trim()).filter(Boolean);
+    for(const group of groups){
+      const packageId=String(group.pack.id),values=entry.packageState?.[packageId]||getPackageDefaults(group);
+      const isFallback=group.pack.kind==="decay"||group.pack.availability_rule==="one_available_with_priority_fallback"||group.pack.kind==="single_required";
+      if(isFallback){
+        const selected=group.members.find(member=>Number(values[member.row.composition_id])>0);
+        const standard=group.members.find(member=>Number(member.config.default_quantity)>0);
+        if(selected&&standard&&selected!==standard){
+          const auto=previous.find(text=>text.startsWith("Decaimento automático:")&&text.includes(standard.component.name)&&text.includes(selected.component.name));
+          labels.push(auto||`Substituir ${standard.component.name} por ${selected.component.name}`);
+        }
+        continue;
+      }
+      for(const member of group.members){
+        const key=String(member.row.composition_id),standard=Math.max(0,Number(member.config.default_quantity)||0),selected=Math.max(0,Number(values[key]??standard)||0),difference=selected-standard;
+        if(!difference)continue;
+        labels.push(difference>0?`Adicionar ${difference>1?`${difference}x `:""}${member.component.name}`:`Remover ${-difference>1?`${-difference}x `:""}${member.component.name}`);
+      }
+    }
+    return labels.join(" | ");
+  }
+  if(associatedGroups.length)return "";
+  for(const association of state.associations.filter(row=>String(row.owner_id)===String(entry.id))){
+    const component=state.compMap[association.composition_id];if(!component)continue;
+    const standard=Math.max(0,Number(association.link_value)||0),selected=Math.max(0,Number(entry.modState?.[association.id]??standard)||0),difference=selected-standard;
+    if(!difference)continue;
+    labels.push(difference>0?`Adicionar ${difference>1?`${difference}x `:""}${component.name}`:`Remover ${-difference>1?`${-difference}x `:""}${component.name}`);
+  }
+  return labels.join(" | ");
+}
+
 function getCurrentAvailabilityMap() {
   if (!state.items.length) {
     return null;
@@ -520,7 +554,7 @@ function renderCart() {
             <button type="button" class="ghost-btn" data-cart-remove="${index}">Remover</button>
           </div>
         </div>
-        ${entry.optionsText ? `<p class="item-desc">${escapeHtml(entry.optionsText)}</p>` : ""}
+        ${buildEntryOptionsText(entry) ? `<p class="item-desc">${escapeHtml(buildEntryOptionsText(entry))}</p>` : ""}
         ${entry.note ? `<p class="cart-item-note"><strong>Observação:</strong> ${escapeHtml(entry.note)}</p>` : ""}
         ${isCartEntryUnavailable(entry, availabilityMap) ? '<p class="cart-item-warning">Este item ficou indisponível e precisa ser removido do carrinho.</p>' : ""}
         <div class="cart-item-bottom">
@@ -631,11 +665,11 @@ function openCheckoutConfirmation() {
     escapeHtml(state.profile?.phone || ""),
     escapeHtml([state.profile?.street, state.profile?.landmark, state.profile?.address_extra].filter(Boolean).join(" · "))
   ].filter(Boolean).join("<br>");
-  const pooledConfirm=getSellableGroupTotals().map(group=>{const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),components=[...group.components.entries()].filter(([,component])=>component.quantity>0).map(([componentId,component])=>{const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId)),photo=safeImageUrl(presentation?.photo_url_1||"");return `${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<small>${component.quantity}× ${escapeHtml(presentation?.display_name||component.member.component.name)}</small>`}).join("");return `<article class="order-confirm-item"><div><strong>${escapeHtml(categoryName)}</strong><div class="order-confirm-presentations">${components}</div><small>Você ainda pode escolher ${group.freeRemaining} ${escapeHtml(categoryName)}.</small></div><span>${currency(group.totalPrice)}</span></article>`}).join("");
+  const pooledConfirm=getSellableGroupTotals().filter(group=>[...group.components.values()].some(component=>component.quantity>0)).map(group=>{const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),components=[...group.components.entries()].filter(([,component])=>component.quantity>0).map(([componentId,component])=>{const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId)),photo=safeImageUrl(presentation?.photo_url_1||"");return `${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<small>${component.quantity}× ${escapeHtml(presentation?.display_name||component.member.component.name)}</small>`}).join("");return `<article class="order-confirm-item"><div><strong>${escapeHtml(categoryName)}</strong><div class="order-confirm-presentations">${components}</div><small>Você ainda pode escolher ${group.freeRemaining} ${escapeHtml(categoryName)}.</small></div><span>${currency(group.totalPrice)}</span></article>`}).join("");
   ui.checkoutConfirmItems.innerHTML = state.cart.map((entry) => `
     <article class="order-confirm-item">
       <div><strong>${Number(entry.qty)}× ${escapeHtml(entry.name)}</strong>
-        ${entry.optionsText ? `<small>${escapeHtml(entry.optionsText)}</small>` : ""}
+        ${buildEntryOptionsText(entry) ? `<small>${escapeHtml(buildEntryOptionsText(entry))}</small>` : ""}
         ${entry.note ? `<small>${escapeHtml(entry.note)}</small>` : ""}
       </div><span>${currency(Number(entry.price || 0) * Number(entry.qty || 0))}</span>
     </article>
@@ -731,7 +765,7 @@ async function submitAppOrder() {
       item_id: String(entry.id),
       quantity: Number(entry.qty),
       notes: String(entry.note || ""),
-      options_text: String(entry.optionsText || ""),
+      options_text: buildEntryOptionsText(entry),
       mod_state: entry.modState && typeof entry.modState === "object" ? entry.modState : {},
       package_state: buildOrderPackageState(entry)
     }));
@@ -941,8 +975,9 @@ function buildOrderMessage() {
   state.cart.forEach((entry) => {
     lines.push(`• ${entry.qty}x ${entry.name} - ${currency(entry.qty * entry.price)}`);
 
-    if (entry.optionsText) {
-      const mods = String(entry.optionsText)
+    const optionsText=buildEntryOptionsText(entry);
+    if (optionsText) {
+      const mods = optionsText
         .split("|")
         .map((part) => part.trim())
         .filter(Boolean);
@@ -960,6 +995,7 @@ function buildOrderMessage() {
   });
 
   getSellableGroupTotals().forEach(group => {
+    if (![...group.components.values()].some(component=>component.quantity>0)) return;
     const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack);
     lines.push(`• ${categoryName}:`);
     for (const [componentId,component] of group.components) {
@@ -1220,10 +1256,11 @@ function getCompositionStock(item) {
   return capacities.length ? Math.max(0, Math.min(...capacities)) : Math.max(0, Number(item.stock || 0));
 }
 
-function sortItemsAlphabetically(rows) {
-  return [...rows].sort((a, b) =>
-    String(a?.name || "").localeCompare(String(b?.name || ""), "pt-BR", { sensitivity: "base" })
-  );
+function sortItemsByPriority(rows) {
+  return [...rows]
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => sortPriorityValue(a.item) - sortPriorityValue(b.item) || a.index - b.index)
+    .map(({ item }) => item);
 }
 
 function getVisibleItems(items, groups, groupAssocs) {
@@ -1242,7 +1279,7 @@ function getVisibleItems(items, groups, groupAssocs) {
         __effectiveStock: effectiveStock
       };
     })
-    .filter((item) => item.__effectiveStock >= 0);
+    .filter((item) => item.is_active !== false && Number(item.stock ?? 0) >= 0 && item.__effectiveStock >= 0);
 }
 
 function linkTypeLabel(type) {
@@ -1641,7 +1678,7 @@ function renderBranch(category, children, itemsByCategory, sellableByCategory, d
   section.className = depth === 0 ? "menu-section" : `sub-section depth-${depth}`;
   section.dataset.depth = String(depth);
 
-  const ownItems = sortItemsAlphabetically(itemsByCategory.get(category.id) || []);
+  const ownItems = sortItemsByPriority(itemsByCategory.get(category.id) || []);
   const ownSellableGroups = sellableByCategory.get(String(category.id)) || [];
   const descendants = children[category.id] || [];
   const currentTrail = [...trail, category.name];
@@ -2731,7 +2768,7 @@ async function loadData() {
 
   state.setup = (setupRes.data || [])[0] || null;
   state.categories = sortByPriorityThenName(categoryRes.data || []);
-  state.items = sortItemsAlphabetically(itemsRes.data || []);
+  state.items = sortItemsByPriority(itemsRes.data || []);
   state.compositions = compositionRes.data || [];
   state.associations = associationRes.data || [];
   state.ingredientPackages = ingredientPackages;
