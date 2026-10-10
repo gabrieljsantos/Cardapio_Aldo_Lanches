@@ -1,7 +1,7 @@
 {
-  "0": "openPackageItemModal",
+  "0": "renderCart",
   "1": "bindEvents",
-  "2": "renderCart",
+  "2": "getSellableGroupTotals",
   "3": "js/index.js",
   "4": "backup_esquema_2026-04-04/index.js",
   "5": "bindEvents",
@@ -12,5 +12,6 @@
   "10": "renderMenu",
   "11": "init",
   "12": "getVisibleItems",
-  "13": "normalize"
+  "13": "normalize",
+  "14": "normalize"
 }

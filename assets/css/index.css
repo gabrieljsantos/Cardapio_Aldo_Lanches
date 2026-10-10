@@ -1279,31 +1279,16 @@ body.modal-open {
   margin-top: 2px;
 }
 
-.cart-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(7, 13, 20, 0.68);
-  z-index: 1002;
-  display: none;
-  justify-content: center;
-  padding:0;
-}
-
-.cart-backdrop.show {
-  display: flex;
-}
-
 .cart-panel {
   width:100%;
   max-width:none;
   background: #fff;
-  height: 100%;
-  min-height: 0;
+  height: auto;
+  min-height: 100dvh;
   display: grid;
-  grid-template-rows: auto auto minmax(0,1fr) minmax(0,min(48dvh,360px));
+  grid-template-rows: auto auto auto auto;
   border:0;
-  overflow: hidden;
-  overscroll-behavior:contain;
+  overflow: visible;
 }
 
 .cart-head {
@@ -1434,15 +1419,13 @@ body.modal-open {
 .cart-foot {
   border-top: 1px solid var(--line);
   padding: 12px max(18px,calc((100vw - 1040px)/2)) calc(12px + env(safe-area-inset-bottom));
-  min-height: 0;
-  display: grid;
-  grid-template-rows: minmax(0,1fr) auto;
-  overflow: hidden;
+  display: block;
+  overflow: visible;
   background: #fff;
   box-shadow: 0 -8px 24px #12202b0c;
 }
 
-.cart-foot-content{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.cart-foot-content{min-height:0;overflow:visible}
 .cart-checkout-actions{display:grid;gap:8px;padding-top:8px;background:#fff}
 .cart-checkout-actions .checkout-btn{width:100%;margin:0}
 
@@ -1804,3 +1787,13 @@ body.modal-open {
 .cart-extra-price strong{font-size:1.08rem!important}
 @media(max-width:520px){.cart-sellable-summary{align-items:flex-start}.cart-extra-price{margin-left:auto}}
 @media(max-width:520px){.customer-tabs{gap:3px;padding:4px}.customer-tab{min-height:42px;padding:7px 6px;font-size:.75rem}.page-shell{padding-bottom:88px}.cart-fab{right:10px;bottom:calc(82px + env(safe-area-inset-bottom));min-width:138px;padding:10px 12px}.sellable-card-quantity .qty-btn{width:34px;height:36px;min-width:34px}.sellable-component-card{grid-template-columns:minmax(0,1fr)!important}.sellable-component-card .item-photo{width:100%;height:clamp(125px,45vw,190px)}}
+
+body.cart-page-open{overflow-x:hidden;background:#fff}
+body.cart-page-open .page-shell{width:100%;max-width:none;min-height:100dvh;margin:0;padding:0}
+body.cart-page-open .page-shell>:not(#cartPage):not(#status){display:none!important}
+body.cart-page-open .page-shell>#cartPage{display:block!important;width:100%;min-height:100dvh;margin:0;padding:0}
+body.cart-page-open .cart-fab,body.cart-page-open>.creditos-dev{display:none!important}
+.cart-page[hidden]{display:none!important}
+.cart-page .cart-list{overflow:visible}
+.cart-page .cart-foot{margin-top:12px}
+.cart-page .cart-checkout-actions{padding-bottom:calc(20px + env(safe-area-inset-bottom))}

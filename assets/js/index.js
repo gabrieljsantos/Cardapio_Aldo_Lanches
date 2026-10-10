@@ -44,6 +44,7 @@ const state = {
   photoRotationTimer: null,
   revealObserver: null,
   lockedScrollY: 0,
+  cartReturnScrollY: null,
   visibleReactTimer: null,
   realtimeChannel: null,
   refreshTimer: null,
@@ -74,7 +75,7 @@ const ui = {
   searchInput: document.getElementById("searchInput"),
   modal: document.getElementById("itemModal"),
   modalBody: document.getElementById("modalBody"),
-  cartBackdrop: document.getElementById("cartBackdrop"),
+  cartPage: document.getElementById("cartPage"),
   cartList: document.getElementById("cartList"),
   cartNotice: document.getElementById("cartNotice"),
   cartNote: document.getElementById("cartNote"),
@@ -234,19 +235,21 @@ function openAccountDialog() {
 }
 
 function switchCustomerPage(page) {
-  const pages = { catalog: ui.catalogPage, orders: ui.ordersPage, tracking: ui.trackingPage, profile: ui.profilePage };
+  const pages = { catalog: ui.catalogPage, orders: ui.ordersPage, tracking: ui.trackingPage, profile: ui.profilePage, cart: ui.cartPage };
   if (!pages[page]) page = "catalog";
   state.customerPage = page;
   Object.entries(pages).forEach(([key, element]) => {
     element.hidden = key !== page;
     element.classList.toggle("active", key === page);
   });
+  document.body.classList.toggle("cart-page-open", page === "cart");
   ui.customerTabs.querySelectorAll("[data-customer-page]").forEach(button => {
     const active = button.dataset.customerPage === page;
     button.classList.toggle("active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
   });
-  if (page !== "catalog") window.scrollTo({ top: 0, behavior: "smooth" });
+  if (page === "cart") window.scrollTo(0, 0);
+  else if (page !== "catalog") window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function saveCustomerProfile(event) {
@@ -774,12 +777,16 @@ function removeCartItem(index) {
 }
 
 function openCart() {
-  ui.cartBackdrop.classList.add("show");
+  if(state.customerPage!=="cart")state.cartReturnScrollY=window.scrollY||window.pageYOffset||0;
+  switchCustomerPage("cart");
   scheduleRefreshFromRealtime();
 }
 
 function closeCart() {
-  ui.cartBackdrop.classList.remove("show");
+  const returnScrollY=state.cartReturnScrollY;
+  state.cartReturnScrollY=null;
+  switchCustomerPage("catalog");
+  if(returnScrollY!==null)window.scrollTo(0,returnScrollY);
 }
 
 function openCheckoutConfirmation() {
@@ -2713,12 +2720,6 @@ function bindEvents() {
 
   ui.closeCartBtn.addEventListener("click", closeCart);
   ui.cartNote.addEventListener("input", persistCart);
-  ui.cartBackdrop.addEventListener("click", (event) => {
-    if (event.target === ui.cartBackdrop) {
-      closeCart();
-    }
-  });
-
   ui.cartList.addEventListener("click", (event) => {
     const poolStep=event.target.closest("[data-pool-step]");
     if(poolStep){adjustSellableGroup(poolStep.dataset.packageId,poolStep.dataset.componentId,Number(poolStep.dataset.poolStep));return}

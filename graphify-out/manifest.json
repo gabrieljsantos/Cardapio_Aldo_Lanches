@@ -6,9 +6,9 @@
     "semantic_hash": "19751b2a32e46d1ba1477f357123a898"
   },
   "assets/js/index.js": {
-    "mtime": 1791664960.0310986,
-    "seen": 1791664965.1877437,
-    "ast_hash": "7131fc703fab4a816267a2e50803ee60",
+    "mtime": 1791665542.0116196,
+    "seen": 1791665542.8557389,
+    "ast_hash": "e0c6c6670735b60e77846b88d075ae6c",
     "semantic_hash": ""
   },
   "backup_esquema_2026-04-04/index.js": {
@@ -24,9 +24,9 @@
     "semantic_hash": ""
   },
   "index.html": {
-    "mtime": 1791665084.9545958,
-    "seen": 1791665089.1323183,
-    "ast_hash": "54abb3ad302cd9bb6d65b1f335dcc666",
+    "mtime": 1791665530.634816,
+    "seen": 1791665542.8557456,
+    "ast_hash": "b9859cc066dd0f0d4500398a4ae31ed9",
     "semantic_hash": ""
   },
   "manage_inventory copy.html": {

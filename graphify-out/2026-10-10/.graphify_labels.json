@@ -6,7 +6,7 @@
   "4": "backup_esquema_2026-04-04/index.js",
   "5": "bindEvents",
   "6": "openItemModal",
-  "7": "init",
+  "7": "scheduleVisibleReactLoop",
   "8": "renderMenu",
   "9": "loadData",
   "10": "renderMenu",
