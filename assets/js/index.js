@@ -177,24 +177,43 @@ async function loadCustomerProfile() {
   renderAccountButton();
 }
 
-function splitCustomerPhone(value) {
+function customerPhoneFromValue(value) {
   const raw = String(value || "").trim();
   const digits = raw.replace(/\D/g, "");
-  if (!digits) return { country: "+55", area: "79", local: "" };
-  let country = "55";
-  let national = digits;
-  if (digits.startsWith("55") && (raw.startsWith("+") || digits.length >= 12)) national = digits.slice(2);
-  if (national.length >= 10) return { country: `+${country}`, area: national.slice(0, 2), local: national.slice(2) };
-  if (national.length === 8 || national.length === 9) return { country: `+${country}`, area: "79", local: national };
-  return { country: `+${country}`, area: "79", local: national.slice(-9) };
+  if (!digits) return null;
+
+  // With the prefilled +55 (79), typing only the local number is enough.
+  if (raw.startsWith("+")) {
+    if (!digits.startsWith("55")) return null;
+    const national = digits.slice(2);
+    if (national.length === 8 || national.length === 9) return `+5579${national}`;
+    if (national.length === 10 || national.length === 11) return `+${digits}`;
+    return null;
+  }
+
+  const national = digits.startsWith("55") && digits.length >= 12 ? digits.slice(2) : digits;
+  if (national.length === 8 || national.length === 9) return `+5579${national}`;
+  if (national.length === 10 || national.length === 11) return `+55${national}`;
+  return null;
+}
+
+function formatCustomerPhone(value) {
+  const normalized = customerPhoneFromValue(value);
+  if (!normalized) return "+55 (79) ";
+  const digits = normalized.slice(1);
+  if (!digits.startsWith("55")) return normalized;
+  const national = digits.slice(2);
+  if (national.length !== 10 && national.length !== 11) return normalized;
+  const area = national.slice(0, 2);
+  const local = national.slice(2);
+  const formatted = local.length === 9
+    ? `${local.slice(0, 5)}-${local.slice(5)}`
+    : `${local.slice(0, 4)}-${local.slice(4)}`;
+  return `+55 (${area}) ${formatted}`;
 }
 
 function customerPhoneFromForm(form) {
-  const country = String(form.elements.phone_country_code.value || "").replace(/\D/g, "").slice(0, 3);
-  const area = String(form.elements.phone_area_code.value || "").replace(/\D/g, "").slice(0, 2);
-  const local = String(form.elements.phone_number.value || "").replace(/\D/g, "");
-  if (!country || !area || !/^\d{8,9}$/.test(local)) return null;
-  return `+${country}${area}${local}`;
+  return customerPhoneFromValue(form.elements.phone.value);
 }
 
 function openAccountDialog() {
@@ -205,11 +224,8 @@ function openAccountDialog() {
   switchCustomerPage("profile");
   const form = ui.profileForm;
   const profile = state.profile || {};
-  const phone = splitCustomerPhone(profile.phone);
   form.elements.known_as.value = profile.known_as || "";
-  form.elements.phone_country_code.value = phone.country;
-  form.elements.phone_area_code.value = phone.area;
-  form.elements.phone_number.value = phone.local;
+  form.elements.phone.value = formatCustomerPhone(profile.phone);
   form.elements.street.value = profile.street || "";
   form.elements.landmark.value = profile.landmark || "";
   form.elements.address_extra.value = profile.address_extra || "";
@@ -242,7 +258,7 @@ async function saveCustomerProfile(event) {
   const phone = customerPhoneFromForm(ui.profileForm);
   const street = String(form.get("street") || "").trim();
   if (!knownAs || !phone || !street) {
-    setStatus("Confira o código do país, o DDD e o número do telefone.", "err");
+    setStatus("Confira o número do telefone.", "err");
     return;
   }
   ui.saveProfileBtn.disabled = true;

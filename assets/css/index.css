@@ -155,9 +155,7 @@ img {
 .profile-page-card form{display:grid;grid-template-columns:1fr 1fr;gap:13px}
 .profile-page-card form label{display:grid;gap:6px;font-weight:600}
 .profile-page-card form input{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--text);font:inherit}
-.phone-fields{grid-column:1/-1;display:grid;grid-template-columns:minmax(92px,.7fr) minmax(76px,.55fr) minmax(150px,1.75fr);gap:10px;margin:0;padding:0;border:0}
-.phone-fields label{display:grid;gap:6px;font-weight:600}
-.profile-page-card form label:first-child,.profile-page-card form label:nth-child(3),.profile-page-card form label:nth-child(4),.profile-page-card form label:nth-child(5),.profile-page-card .account-actions{grid-column:1/-1}
+.profile-page-card form label:first-child,.profile-page-card form .profile-phone-field,.profile-page-card form label:nth-child(3),.profile-page-card form label:nth-child(4),.profile-page-card form label:nth-child(5),.profile-page-card .account-actions{grid-column:1/-1}
 .profile-page-card .account-actions .checkout-btn{flex:0 1 240px}
 
 .account-backdrop {
@@ -1300,9 +1298,11 @@ body.modal-open {
   max-width:none;
   background: #fff;
   height: 100%;
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto auto minmax(0,1fr) auto;
+  grid-template-rows: auto auto minmax(0,1fr) minmax(0,min(48dvh,360px));
   border:0;
+  overflow: hidden;
   overscroll-behavior:contain;
 }
 
@@ -1434,7 +1434,17 @@ body.modal-open {
 .cart-foot {
   border-top: 1px solid var(--line);
   padding: 12px max(18px,calc((100vw - 1040px)/2)) calc(12px + env(safe-area-inset-bottom));
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0,1fr) auto;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 -8px 24px #12202b0c;
 }
+
+.cart-foot-content{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.cart-checkout-actions{display:grid;gap:8px;padding-top:8px;background:#fff}
+.cart-checkout-actions .checkout-btn{width:100%;margin:0}
 
 .cart-total-row {
   display: flex;
@@ -1645,11 +1655,10 @@ body.modal-open {
   }
 
   .customer-tabs{border-radius:16px}
-  .phone-fields{grid-template-columns:minmax(72px,.7fr) minmax(60px,.55fr) minmax(110px,1.75fr);gap:7px}
   .customer-tab{min-height:40px;padding:8px 12px;font-size:.82rem}
   .profile-page-card{padding:15px}
   .profile-page-card form{grid-template-columns:1fr}
-  .profile-page-card form label,.profile-page-card form label:first-child,.profile-page-card form label:nth-child(3),.profile-page-card form label:nth-child(4),.profile-page-card form label:nth-child(5),.profile-page-card .account-actions{grid-column:1}
+  .profile-page-card form label,.profile-page-card form label:first-child,.profile-page-card form .profile-phone-field,.profile-page-card form label:nth-child(3),.profile-page-card form label:nth-child(4),.profile-page-card form label:nth-child(5),.profile-page-card .account-actions{grid-column:1}
 }
 
 .cart-foot>.checkout-btn+.checkout-btn{margin-top:8px}
