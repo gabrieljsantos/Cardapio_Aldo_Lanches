@@ -155,6 +155,8 @@ img {
 .profile-page-card form{display:grid;grid-template-columns:1fr 1fr;gap:13px}
 .profile-page-card form label{display:grid;gap:6px;font-weight:600}
 .profile-page-card form input{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--text);font:inherit}
+.phone-fields{grid-column:1/-1;display:grid;grid-template-columns:minmax(92px,.7fr) minmax(76px,.55fr) minmax(150px,1.75fr);gap:10px;margin:0;padding:0;border:0}
+.phone-fields label{display:grid;gap:6px;font-weight:600}
 .profile-page-card form label:first-child,.profile-page-card form label:nth-child(3),.profile-page-card form label:nth-child(4),.profile-page-card form label:nth-child(5),.profile-page-card .account-actions{grid-column:1/-1}
 .profile-page-card .account-actions .checkout-btn{flex:0 1 240px}
 
@@ -1633,6 +1635,7 @@ body.modal-open {
   }
 
   .customer-tabs{border-radius:16px}
+  .phone-fields{grid-template-columns:minmax(72px,.7fr) minmax(60px,.55fr) minmax(110px,1.75fr);gap:7px}
   .customer-tab{min-height:40px;padding:8px 12px;font-size:.82rem}
   .profile-page-card{padding:15px}
   .profile-page-card form{grid-template-columns:1fr}

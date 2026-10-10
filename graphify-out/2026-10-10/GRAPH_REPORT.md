@@ -1,7 +1,7 @@
 # Graph Report - Cardapio_Aldo_Lanches  (2026-10-10)
 
 ## Corpus Check
-- 3 files · ~95,454 words
+- 3 files · ~95,476 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 4 file(s) not represented in the graph (top: .css 2, (none) 1, .cdr 1)
 

@@ -176,6 +176,26 @@ async function loadCustomerProfile() {
   renderAccountButton();
 }
 
+function splitCustomerPhone(value) {
+  const raw = String(value || "").trim();
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return { country: "+55", area: "79", local: "" };
+  let country = "55";
+  let national = digits;
+  if (digits.startsWith("55") && (raw.startsWith("+") || digits.length >= 12)) national = digits.slice(2);
+  if (national.length >= 10) return { country: `+${country}`, area: national.slice(0, 2), local: national.slice(2) };
+  if (national.length === 8 || national.length === 9) return { country: `+${country}`, area: "79", local: national };
+  return { country: `+${country}`, area: "79", local: national.slice(-9) };
+}
+
+function customerPhoneFromForm(form) {
+  const country = String(form.elements.phone_country_code.value || "").replace(/\D/g, "").slice(0, 3);
+  const area = String(form.elements.phone_area_code.value || "").replace(/\D/g, "").slice(0, 2);
+  const local = String(form.elements.phone_number.value || "").replace(/\D/g, "");
+  if (!country || !area || !/^\d{8,9}$/.test(local)) return null;
+  return `+${country}${area}${local}`;
+}
+
 function openAccountDialog() {
   if (!state.user) {
     startCustomerLogin("profile");
@@ -184,8 +204,11 @@ function openAccountDialog() {
   switchCustomerPage("profile");
   const form = ui.profileForm;
   const profile = state.profile || {};
+  const phone = splitCustomerPhone(profile.phone);
   form.elements.known_as.value = profile.known_as || "";
-  form.elements.phone.value = profile.phone || "";
+  form.elements.phone_country_code.value = phone.country;
+  form.elements.phone_area_code.value = phone.area;
+  form.elements.phone_number.value = phone.local;
   form.elements.street.value = profile.street || "";
   form.elements.landmark.value = profile.landmark || "";
   form.elements.address_extra.value = profile.address_extra || "";
@@ -215,10 +238,10 @@ async function saveCustomerProfile(event) {
   if (!ui.profileForm.reportValidity()) return;
   const form = new FormData(ui.profileForm);
   const knownAs = String(form.get("known_as") || "").trim();
-  const phone = String(form.get("phone") || "").trim();
+  const phone = customerPhoneFromForm(ui.profileForm);
   const street = String(form.get("street") || "").trim();
   if (!knownAs || !phone || !street) {
-    setStatus("Preencha como você é conhecido, seu telefone e onde você mora.", "err");
+    setStatus("Confira o código do país, o DDD e o número do telefone.", "err");
     return;
   }
   ui.saveProfileBtn.disabled = true;

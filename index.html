@@ -70,7 +70,11 @@
         <p class="account-email" id="accountEmail"></p>
         <form id="profileForm">
           <label>Como você é conhecido?<input name="known_as" autocomplete="nickname" maxlength="100" required></label>
-          <label>Telefone<input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" required></label>
+          <div class="phone-fields" role="group" aria-label="Telefone">
+            <label>País<input name="phone_country_code" type="tel" autocomplete="tel-country-code" inputmode="tel" value="+55" maxlength="4" required></label>
+            <label>DDD<input name="phone_area_code" type="tel" autocomplete="tel-area-code" inputmode="numeric" value="79" maxlength="2" pattern="[0-9]{2}" required></label>
+            <label>Número<input name="phone_number" type="tel" autocomplete="tel-national" inputmode="tel" maxlength="14" required></label>
+          </div>
           <label>Onde você mora?<input name="street" autocomplete="address-level2" maxlength="180" required></label>
           <label>Ponto de referência<input name="landmark" maxlength="180"></label>
           <label>Complemento<input name="address_extra" autocomplete="address-line2" maxlength="180"></label>

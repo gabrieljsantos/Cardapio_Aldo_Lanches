@@ -12,7 +12,5 @@
   "10": "renderMenu",
   "11": "init",
   "12": "scheduleVisibleReactLoop",
-  "13": "getItemPackageGroups",
-  "14": "normalize",
-  "15": "getVisibleItems"
+  "14": "normalize"
 }
