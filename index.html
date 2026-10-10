@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/index.css?v=20261010-component-showcase">
+  <link rel="stylesheet" href="assets/css/index.css?v=20261010-customer-pages">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -30,12 +30,19 @@
           </div>
         </div>
         <div class="header-account-actions">
-          <button type="button" class="account-btn" id="myOrdersBtn" hidden>Meus pedidos</button>
           <button type="button" class="account-btn" id="accountBtn">Entrar</button>
         </div>
       </div>
     </header>
 
+    <nav class="customer-tabs" id="customerTabs" aria-label="Navegação do cardápio">
+      <button type="button" class="customer-tab active" data-customer-page="catalog">Cardápio</button>
+      <button type="button" class="customer-tab" data-customer-page="orders">Meus pedidos</button>
+      <button type="button" class="customer-tab" data-customer-page="tracking">Acompanhar</button>
+      <button type="button" class="customer-tab" data-customer-page="profile">Meus dados</button>
+    </nav>
+
+    <section id="catalogPage" class="customer-page active">
     <section class="tools">
       <div id="storeInfo" class="store-info" hidden>
         <div class="store-info-text" id="storeInfoText"></div>
@@ -45,41 +52,36 @@
     </section>
 
     <main class="main" id="menu"></main>
+    </section>
+
+    <section id="ordersPage" class="customer-page" hidden>
+      <div class="customer-page-heading"><h2>Meus pedidos</h2></div>
+      <div id="customerOrderList" class="customer-order-list"></div>
+    </section>
+
+    <section id="trackingPage" class="customer-page" hidden>
+      <div class="customer-page-heading"><h2>Acompanhar</h2></div>
+      <div id="activeCustomerOrders" class="active-customer-orders"></div>
+    </section>
+
+    <section id="profilePage" class="customer-page" hidden>
+      <div class="profile-page-card">
+        <div class="customer-page-heading"><h2>Meus dados</h2><button type="button" class="ghost-btn" id="signOutBtn" hidden>Sair</button></div>
+        <p class="account-email" id="accountEmail"></p>
+        <form id="profileForm">
+          <label>Como você é conhecido?<input name="known_as" autocomplete="nickname" maxlength="100" required></label>
+          <label>Telefone<input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" required></label>
+          <label>Onde você mora?<input name="street" autocomplete="address-level2" maxlength="180" required></label>
+          <label>Ponto de referência<input name="landmark" maxlength="180"></label>
+          <label>Complemento<input name="address_extra" autocomplete="address-line2" maxlength="180"></label>
+          <div class="account-actions"><button type="submit" class="checkout-btn" id="saveProfileBtn">Salvar</button></div>
+        </form>
+      </div>
+    </section>
   </div>
 
   <div class="modal-backdrop" id="itemModal">
     <div id="modalBody"></div>
-  </div>
-
-  <div class="account-backdrop" id="accountBackdrop" hidden>
-    <section class="account-dialog" role="dialog" aria-modal="true" aria-labelledby="accountTitle">
-      <div class="account-dialog-head">
-        <h2 id="accountTitle">Sua conta</h2>
-        <button type="button" class="ghost-btn" id="closeAccountBtn" aria-label="Fechar">×</button>
-      </div>
-      <p class="account-email" id="accountEmail"></p>
-      <form id="profileForm">
-        <label>Como você é conhecido?
-          <input name="known_as" autocomplete="nickname" maxlength="100" required>
-        </label>
-        <label>Telefone
-          <input name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="30" required>
-        </label>
-        <label>Onde você mora?
-          <input name="street" autocomplete="address-level2" maxlength="180" required>
-        </label>
-        <label>Ponto de referência
-          <input name="landmark" maxlength="180">
-        </label>
-        <label>Complemento
-          <input name="address_extra" autocomplete="address-line2" maxlength="180">
-        </label>
-        <div class="account-actions">
-          <button type="submit" class="checkout-btn" id="saveProfileBtn">Salvar</button>
-          <button type="button" class="ghost-btn" id="signOutBtn" hidden>Sair</button>
-        </div>
-      </form>
-    </section>
   </div>
 
   <div class="cart-backdrop" id="cartBackdrop">
@@ -88,6 +90,7 @@
         <h3>Seu carrinho</h3>
         <button type="button" id="closeCartBtn" class="ghost-btn">Fechar</button>
       </header>
+      <p id="cartNotice" class="cart-notice" hidden></p>
       <div class="cart-list" id="cartList"></div>
       <footer class="cart-foot">
         <div class="cart-total-row">
@@ -125,15 +128,10 @@
     </section>
   </div>
 
-  <div class="account-backdrop" id="customerOrdersBackdrop" hidden>
-    <section class="account-dialog customer-orders-dialog" role="dialog" aria-modal="true" aria-labelledby="customerOrdersTitle">
-      <div class="account-dialog-head">
-        <button type="button" class="ghost-btn" id="backToOrdersListBtn" hidden>Voltar</button>
-        <h2 id="customerOrdersTitle">Meus pedidos</h2>
-        <button type="button" class="ghost-btn" id="closeCustomerOrdersBtn" aria-label="Fechar">×</button>
-      </div>
-      <div id="customerOrderList" class="customer-order-list"></div>
-      <div id="customerOrderDetail" class="customer-order-detail" hidden></div>
+  <div class="account-backdrop" id="customerOrderDetailBackdrop" hidden>
+    <section class="account-dialog customer-orders-dialog" role="dialog" aria-modal="true" aria-labelledby="customerOrderDetailTitle">
+      <div class="account-dialog-head"><h2 id="customerOrderDetailTitle">Pedido</h2><button type="button" class="ghost-btn" id="closeCustomerOrderDetailBtn" aria-label="Fechar">Fechar</button></div>
+      <div id="customerOrderDetail" class="customer-order-detail"></div>
     </section>
   </div>
 
@@ -151,6 +149,6 @@
     </nav>
   </footer>
 
-  <script src="assets/js/index.js?v=20261010-public-group-description-visibility"></script>
+  <script src="assets/js/index.js?v=20261010-customer-pages-cart-fullscreen"></script>
 </body>
 </html>

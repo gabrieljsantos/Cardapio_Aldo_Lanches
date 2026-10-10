@@ -143,6 +143,21 @@ img {
 
 .header-account-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 
+.customer-tabs{display:flex;gap:8px;overflow-x:auto;margin-top:12px;padding:4px;border:1px solid var(--line);border-radius:999px;background:#ffffffdb;box-shadow:var(--shadow-sm);scrollbar-width:thin}
+.customer-tab{flex:1 0 auto;min-height:42px;padding:8px 16px;border:0;border-radius:999px;background:transparent;color:var(--muted);font:inherit;font-size:.9rem;font-weight:700;cursor:pointer;transition:background .18s ease,color .18s ease,box-shadow .18s ease}
+.customer-tab:hover{background:#fff1e6;color:var(--primary-strong)}
+.customer-tab.active{background:var(--primary);color:#fff;box-shadow:0 4px 12px #f9731638}
+.customer-page[hidden]{display:none!important}
+.customer-page{margin-top:16px;min-height:42vh}
+.customer-page-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
+.customer-page-heading h2{margin:0;font-family:"Bricolage Grotesque","Segoe UI",sans-serif;color:#1d3557}
+.profile-page-card{width:min(100%,720px);margin:0 auto;padding:22px;border:1px solid var(--line);border-radius:var(--radius-lg);background:#fff;box-shadow:var(--shadow-sm)}
+.profile-page-card form{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.profile-page-card form label{display:grid;gap:6px;font-weight:600}
+.profile-page-card form input{width:100%;min-height:44px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--text);font:inherit}
+.profile-page-card form label:first-child,.profile-page-card form label:nth-child(3),.profile-page-card form label:nth-child(4),.profile-page-card form label:nth-child(5),.profile-page-card .account-actions{grid-column:1/-1}
+.profile-page-card .account-actions .checkout-btn{flex:0 1 240px}
+
 .account-backdrop {
   position: fixed;
   inset: 0;
@@ -204,8 +219,15 @@ img {
 .customer-order-card>div { display: grid; gap: 4px; min-width: 0; }
 .customer-order-card small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
 .customer-order-card>button { grid-column: 1 / -1; justify-self: end; }
+.customer-order-actions{grid-column:1/-1;display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .customer-order-status { color: var(--primary-strong); font-weight: 700; }
 .customer-orders-empty { margin: 0; padding: 20px 0; color: var(--muted); text-align: center; }
+.active-customer-orders{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start;gap:14px}
+.active-order-card{padding:16px;border:1px solid var(--line);border-radius:var(--radius-md);background:#fff;box-shadow:var(--shadow-sm)}
+.active-order-card.is-selected{border-color:#f97316;box-shadow:0 0 0 3px #f9731622,var(--shadow-sm)}
+.active-order-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.active-order-card>p{margin:10px 0;color:var(--muted);line-height:1.5}
+.active-order-card>.order-timeline{margin:14px 0 4px}
 .order-tracking-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: var(--muted); }
 .order-timeline { display: grid; gap: 0; margin: 8px 0; padding: 0; list-style: none; }
 .order-stage { position: relative; display: grid; grid-template-columns: 18px 1fr; gap: 10px; min-height: 50px; color: var(--muted); }
@@ -1225,7 +1247,11 @@ img {
 
 .cart-fab.show {
   display: block;
+  animation: cartFabBounce 2.6s ease-in-out infinite;
 }
+
+@keyframes cartFabBounce{0%,82%,100%{transform:translateY(0)}88%{transform:translateY(-7px)}94%{transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.cart-fab.show{animation:none}}
 
 body.modal-open .cart-fab {
   display: none !important;
@@ -1252,10 +1278,11 @@ body.modal-open {
 .cart-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(7, 13, 20, 0.52);
+  background: rgba(7, 13, 20, 0.68);
   z-index: 1002;
   display: none;
-  justify-content: flex-end;
+  justify-content: center;
+  padding:0;
 }
 
 .cart-backdrop.show {
@@ -1263,16 +1290,18 @@ body.modal-open {
 }
 
 .cart-panel {
-  width: min(420px, 100%);
+  width:100%;
+  max-width:none;
   background: #fff;
   height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  border-left: 1px solid var(--line);
+  grid-template-rows: auto auto minmax(0,1fr) auto;
+  border:0;
+  overscroll-behavior:contain;
 }
 
 .cart-head {
-  padding: 14px;
+  padding: 16px max(18px,calc((100vw - 1040px)/2));
   border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
@@ -1301,7 +1330,7 @@ body.modal-open {
 }
 
 .cart-list {
-  padding: 12px;
+  padding: 18px max(18px,calc((100vw - 1040px)/2));
   overflow: auto;
   display: grid;
   gap: 10px;
@@ -1373,6 +1402,12 @@ body.modal-open {
   align-items: center;
 }
 
+.cart-notice{max-width:1040px;width:calc(100% - 36px);margin:12px auto 0;padding:11px 14px;border:1px solid #a9d5b0;border-radius:10px;background:#effaf0;color:#236332;font-weight:600}
+.cart-notice.has-unavailable{border-color:#f3b48f;background:#fff3eb;color:#973e15}
+.cart-notice[hidden]{display:none}
+
+.cart-foot{padding:14px max(18px,calc((100vw - 1040px)/2)) calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#fff;box-shadow:0 -8px 24px #12202b0c}
+
 .cart-pooled-component{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;padding:8px 0;border-top:1px solid var(--line)}
 .cart-pooled-component-identity{display:flex;align-items:center;gap:9px;min-width:0}
 .cart-pooled-component-identity img,.customer-component-order-line>img{width:48px;height:48px;object-fit:cover;border-radius:9px;background:var(--surface-soft);flex-shrink:0}
@@ -1386,7 +1421,7 @@ body.modal-open {
 
 .cart-foot {
   border-top: 1px solid var(--line);
-  padding: 12px;
+  padding: 12px max(18px,calc((100vw - 1040px)/2)) calc(12px + env(safe-area-inset-bottom));
 }
 
 .cart-total-row {
@@ -1596,6 +1631,12 @@ body.modal-open {
     min-width: 0;
     border-radius: 12px;
   }
+
+  .customer-tabs{border-radius:16px}
+  .customer-tab{min-height:40px;padding:8px 12px;font-size:.82rem}
+  .profile-page-card{padding:15px}
+  .profile-page-card form{grid-template-columns:1fr}
+  .profile-page-card form label,.profile-page-card form label:first-child,.profile-page-card form label:nth-child(3),.profile-page-card form label:nth-child(4),.profile-page-card form label:nth-child(5),.profile-page-card .account-actions{grid-column:1}
 }
 
 @media (max-width: 480px) {

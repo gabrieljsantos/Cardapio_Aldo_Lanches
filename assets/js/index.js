@@ -6,6 +6,7 @@ const CART_STORAGE_KEY = "smart-store-hub-cart-v1";
 const APP_CHECKOUT_INTENT_KEY = "smart-store-hub-app-checkout-intent";
 const APP_CHECKOUT_SNAPSHOT_KEY = "smart-store-hub-app-checkout-snapshot-v1";
 const CART_GROUP_ADJUSTMENTS_KEY = "smart-store-hub-cart-group-adjustments-v1";
+const CUSTOMER_PAGE_INTENT_KEY = "smart-store-hub-customer-page-intent";
 let checkoutResumeInFlight = false;
 const ORDER_STAGES = [
   { key: "pending_confirmation", label: "Aguardando confirmação" },
@@ -35,6 +36,8 @@ const state = {
   compMap: {},
   searchTerm: "",
   cart: [],
+  cartNotice: "",
+  cartNoticeIsError: false,
   cartGroupAdjustments: {},
   modalQty: 1,
   photoRotationTimer: null,
@@ -50,7 +53,8 @@ const state = {
   authReady: false,
   customerOrders: [],
   selectedCustomerOrderId: null,
-  customerOrdersPollingTimer: null
+  customerOrdersPollingTimer: null,
+  customerPage: "catalog"
 };
 
 const ui = {
@@ -71,6 +75,7 @@ const ui = {
   modalBody: document.getElementById("modalBody"),
   cartBackdrop: document.getElementById("cartBackdrop"),
   cartList: document.getElementById("cartList"),
+  cartNotice: document.getElementById("cartNotice"),
   cartNote: document.getElementById("cartNote"),
   cartTotal: document.getElementById("cartTotal"),
   cartFab: document.getElementById("cartFab"),
@@ -82,9 +87,12 @@ const ui = {
   appCheckoutBtn: document.getElementById("appCheckoutBtn"),
   checkoutBtn: document.getElementById("checkoutBtn"),
   accountBtn: document.getElementById("accountBtn"),
-  myOrdersBtn: document.getElementById("myOrdersBtn"),
-  accountBackdrop: document.getElementById("accountBackdrop"),
-  closeAccountBtn: document.getElementById("closeAccountBtn"),
+  customerTabs: document.getElementById("customerTabs"),
+  catalogPage: document.getElementById("catalogPage"),
+  ordersPage: document.getElementById("ordersPage"),
+  trackingPage: document.getElementById("trackingPage"),
+  profilePage: document.getElementById("profilePage"),
+  activeCustomerOrders: document.getElementById("activeCustomerOrders"),
   accountEmail: document.getElementById("accountEmail"),
   profileForm: document.getElementById("profileForm"),
   saveProfileBtn: document.getElementById("saveProfileBtn"),
@@ -97,9 +105,8 @@ const ui = {
   orderPaymentMethod: document.getElementById("orderPaymentMethod"),
   backToCartBtn: document.getElementById("backToCartBtn"),
   confirmAppOrderBtn: document.getElementById("confirmAppOrderBtn"),
-  customerOrdersBackdrop: document.getElementById("customerOrdersBackdrop"),
-  closeCustomerOrdersBtn: document.getElementById("closeCustomerOrdersBtn"),
-  backToOrdersListBtn: document.getElementById("backToOrdersListBtn"),
+  customerOrderDetailBackdrop: document.getElementById("customerOrderDetailBackdrop"),
+  closeCustomerOrderDetailBtn: document.getElementById("closeCustomerOrderDetailBtn"),
   customerOrderList: document.getElementById("customerOrderList"),
   customerOrderDetail: document.getElementById("customerOrderDetail")
 };
@@ -115,10 +122,10 @@ function renderAccountButton() {
     ? (state.profile?.known_as || "Minha conta")
     : "Entrar";
   ui.accountBtn.setAttribute("aria-label", state.user ? "Abrir minha conta" : "Entrar com Google");
-  ui.myOrdersBtn.hidden = !state.user;
 }
 
-function startCustomerLogin() {
+function startCustomerLogin(intendedPage = null) {
+  if(intendedPage)sessionStorage.setItem(CUSTOMER_PAGE_INTENT_KEY,intendedPage);
   if (state.cart.length) savePendingCheckoutSnapshot();
   db.auth.signInWithOAuth({
     provider: "google",
@@ -171,9 +178,10 @@ async function loadCustomerProfile() {
 
 function openAccountDialog() {
   if (!state.user) {
-    startCustomerLogin();
+    startCustomerLogin("profile");
     return;
   }
+  switchCustomerPage("profile");
   const form = ui.profileForm;
   const profile = state.profile || {};
   form.elements.known_as.value = profile.known_as || "";
@@ -183,15 +191,22 @@ function openAccountDialog() {
   form.elements.address_extra.value = profile.address_extra || "";
   ui.accountEmail.textContent = state.user.email || "";
   ui.signOutBtn.hidden = false;
-  ui.accountBackdrop.hidden = false;
-  ui.accountBackdrop.classList.add("show");
-  lockPageScroll();
 }
 
-function closeAccountDialog() {
-  ui.accountBackdrop.classList.remove("show");
-  ui.accountBackdrop.hidden = true;
-  unlockPageScroll();
+function switchCustomerPage(page) {
+  const pages = { catalog: ui.catalogPage, orders: ui.ordersPage, tracking: ui.trackingPage, profile: ui.profilePage };
+  if (!pages[page]) page = "catalog";
+  state.customerPage = page;
+  Object.entries(pages).forEach(([key, element]) => {
+    element.hidden = key !== page;
+    element.classList.toggle("active", key === page);
+  });
+  ui.customerTabs.querySelectorAll("[data-customer-page]").forEach(button => {
+    const active = button.dataset.customerPage === page;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
+  if (page !== "catalog") window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 async function saveCustomerProfile(event) {
@@ -221,7 +236,6 @@ async function saveCustomerProfile(event) {
     }, { onConflict: "user_id" });
     if (error) throw error;
     await loadCustomerProfile();
-    closeAccountDialog();
     setStatus("Cadastro salvo.", "ok");
     await resumePendingAppCheckout();
   } catch (error) {
@@ -238,7 +252,7 @@ async function initializeCustomerAuth() {
     if (state.user?.id !== nextUser?.id) {
       state.customerOrders = [];
       state.selectedCustomerOrderId = null;
-      if (!nextUser && ui.customerOrdersBackdrop.classList.contains("show")) closeCustomerOrders();
+      if (!nextUser && state.customerPage !== "catalog") switchCustomerPage("catalog");
     }
     state.user = nextUser;
     state.profile = null;
@@ -247,7 +261,8 @@ async function initializeCustomerAuth() {
       try {
         await loadCustomerProfile();
         await resumePendingAppCheckout();
-        if (state.user && ui.customerOrdersBackdrop.classList.contains("show")) {
+        await resumeCustomerPageIntent();
+        if (state.user && ["orders", "tracking"].includes(state.customerPage)) {
           await loadCustomerOrders(state.selectedCustomerOrderId);
         }
       } catch (profileError) {
@@ -263,6 +278,16 @@ async function initializeCustomerAuth() {
   state.authReady = true;
   renderAccountButton();
   await resumePendingAppCheckout();
+  await resumeCustomerPageIntent();
+}
+
+async function resumeCustomerPageIntent(){
+  if(!state.user)return;
+  const page=sessionStorage.getItem(CUSTOMER_PAGE_INTENT_KEY);if(!page)return;
+  if(sessionStorage.getItem(APP_CHECKOUT_INTENT_KEY)==="confirm"){sessionStorage.removeItem(CUSTOMER_PAGE_INTENT_KEY);return}
+  sessionStorage.removeItem(CUSTOMER_PAGE_INTENT_KEY);
+  if(page==="profile"){openAccountDialog();return}
+  if(["orders","tracking"].includes(page))await openCustomerOrders(null,page);
 }
 
 async function resumePendingAppCheckout() {
@@ -448,6 +473,7 @@ function getCurrentAvailabilityMap() {
 }
 
 function isCartEntryUnavailable(entry, availabilityMap) {
+  if(entry.replayNeedsReview)return true;
   if (!availabilityMap) {
     return false;
   }
@@ -525,6 +551,7 @@ function renderCart() {
     || sellableGroups.some(group=>[...group.components.values()].some(component=>component.quantity>component.maxQuantity));
 
   ui.cartTotal.textContent = currency(total);
+  if(ui.cartNotice){ui.cartNotice.hidden=!state.cartNotice;ui.cartNotice.textContent=state.cartNotice||"";ui.cartNotice.classList.toggle("has-unavailable",state.cartNoticeIsError===true)}
   ui.cartFabCount.textContent = `${count} ${count === 1 ? "item" : "itens"}`;
   ui.cartFabTotal.textContent = currency(total);
   ui.checkoutBtn.disabled = count === 0 || hasUnavailable;
@@ -556,7 +583,7 @@ function renderCart() {
         </div>
         ${buildEntryOptionsText(entry) ? `<p class="item-desc">${escapeHtml(buildEntryOptionsText(entry))}</p>` : ""}
         ${entry.note ? `<p class="cart-item-note"><strong>Observação:</strong> ${escapeHtml(entry.note)}</p>` : ""}
-        ${isCartEntryUnavailable(entry, availabilityMap) ? '<p class="cart-item-warning">Este item ficou indisponível e precisa ser removido do carrinho.</p>' : ""}
+        ${isCartEntryUnavailable(entry, availabilityMap) ? `<p class="cart-item-warning">${entry.replayNeedsReview?"Revise as opções: algum componente do pedido anterior está indisponível.":"Este item ficou indisponível e precisa ser removido do carrinho."}</p>` : ""}
         <div class="cart-item-bottom">
           <div class="qty-wrap">
             <button type="button" class="qty-btn" data-cart-delta="-1" data-cart-index="${index}">-</button>
@@ -787,7 +814,7 @@ async function submitAppOrder() {
     closeCheckoutConfirmation();
     closeCart();
     setStatus("Pedido feito.", "ok");
-    await openCustomerOrders(orderId);
+    await openCustomerOrders(orderId,"tracking");
   } catch (error) {
     console.error("Falha ao enviar pedido:", error);
     setStatus(error.message || "Não foi possível enviar o pedido.", "err");
@@ -796,22 +823,17 @@ async function submitAppOrder() {
   }
 }
 
-async function openCustomerOrders(selectedId = null) {
+async function openCustomerOrders(selectedId = null, destination = "orders") {
   if (!state.user) {
     startCustomerLogin();
     return;
   }
   state.selectedCustomerOrderId = selectedId;
-  ui.customerOrderList.hidden = false;
-  ui.customerOrderDetail.hidden = true;
-  ui.backToOrdersListBtn.hidden = true;
-  ui.customerOrdersBackdrop.hidden = false;
-  ui.customerOrdersBackdrop.classList.add("show");
-  lockPageScroll();
+  switchCustomerPage(destination);
   await loadCustomerOrders(selectedId);
   if (state.customerOrdersPollingTimer) clearInterval(state.customerOrdersPollingTimer);
   state.customerOrdersPollingTimer = window.setInterval(() => {
-    if (ui.customerOrdersBackdrop.classList.contains("show")) {
+    if (["orders", "tracking"].includes(state.customerPage)) {
       loadCustomerOrders(state.selectedCustomerOrderId).catch((error) => console.error("Falha ao atualizar pedidos:", error));
     }
   }, 20000);
@@ -820,11 +842,11 @@ async function openCustomerOrders(selectedId = null) {
 async function loadCustomerOrders(selectedId = null) {
   if (!state.user) return;
   let response = await db.from("orders")
-    .select("id, status, created_at, customer_known_as, phone, delivery_address, notes, payment_method, subtotal, total, order_items(id, item_name, unit_price, quantity, notes, snapshot, order_item_components(id, component_name, quantity, free_quantity, charged_quantity, unit_price)), order_sellable_component_totals(id, group_name, customer_name, component_name, quantity, automatic_quantity, manual_adjustment, charged_quantity, unit_price, snapshot), order_status_history(id, from_status, to_status, created_at)")
+    .select("id, status, created_at, customer_known_as, phone, delivery_address, notes, payment_method, subtotal, total, order_items(id, catalog_item_id, item_name, unit_price, quantity, notes, snapshot, order_item_components(id, composition_id, component_name, quantity, free_quantity, charged_quantity, unit_price)), order_sellable_component_totals(id, package_id, composition_id, group_name, customer_name, component_name, quantity, automatic_quantity, manual_adjustment, charged_quantity, unit_price, snapshot), order_status_history(id, from_status, to_status, created_at)")
     .eq("customer_id", state.user.id)
     .order("created_at", { ascending: false });
   if (response.error && /order_sellable_component_totals|relationship|schema cache/i.test(response.error.message || "")) response = await db.from("orders")
-    .select("id, status, created_at, customer_known_as, phone, delivery_address, notes, payment_method, subtotal, total, order_items(id, item_name, unit_price, quantity, notes, snapshot, order_item_components(id, component_name, quantity, free_quantity, charged_quantity, unit_price)), order_status_history(id, from_status, to_status, created_at)")
+    .select("id, status, created_at, customer_known_as, phone, delivery_address, notes, payment_method, subtotal, total, order_items(id, catalog_item_id, item_name, unit_price, quantity, notes, snapshot, order_item_components(id, composition_id, component_name, quantity, free_quantity, charged_quantity, unit_price)), order_status_history(id, from_status, to_status, created_at)")
     .eq("customer_id", state.user.id)
     .order("created_at", { ascending: false });
   const { data, error } = response;
@@ -835,10 +857,7 @@ async function loadCustomerOrders(selectedId = null) {
   }
   state.customerOrders = data || [];
   renderCustomerOrders();
-  if (selectedId) {
-    const selected = state.customerOrders.find((order) => order.id === selectedId);
-    if (selected) showCustomerOrderDetail(selected);
-  }
+  renderActiveCustomerOrders();
 }
 
 function renderCustomerOrders() {
@@ -851,17 +870,29 @@ function renderCustomerOrders() {
       ? "Pedido cancelado"
       : (ORDER_STAGES.find((stage) => stage.key === order.status)?.label || "Pedido");
     const itemNames = [...(order.order_items || []).map((item) => `${Number(item.quantity)}× ${escapeHtml(item.item_name)}`), ...(order.order_sellable_component_totals||[]).filter(row=>Number(row.quantity)>0).map(row=>`${Number(row.quantity)}× ${escapeHtml(row.component_name)}`)].join(" · ");
-    return `<article class="customer-order-card">
+    return `<article class="customer-order-card" data-history-order="${escapeHtml(order.id)}">
       <div><strong>${new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong>
         <span class="customer-order-status">${escapeHtml(status)}</span><small>${itemNames}</small>
       </div><strong>${currency(order.total)}</strong>
-      <button type="button" class="ghost-btn" data-customer-order="${escapeHtml(order.id)}">Acompanhar</button>
+      <div class="customer-order-actions"><button type="button" class="ghost-btn" data-customer-order="${escapeHtml(order.id)}">${["pending_confirmation","received","confirmed","production","delivery"].includes(order.status)?"Acompanhar":"Ver detalhes"}</button><button type="button" class="ghost-btn" data-repeat-order="${escapeHtml(order.id)}">Repetir pedido</button></div>
     </article>`;
+  }).join("");
+}
+
+function renderActiveCustomerOrders() {
+  const active=state.customerOrders.filter(order=>["pending_confirmation","received","confirmed","production","delivery"].includes(order.status));
+  if(!active.length){ui.activeCustomerOrders.innerHTML='<p class="customer-orders-empty">Nenhum pedido em andamento.</p>';return}
+  ui.activeCustomerOrders.innerHTML=active.map(order=>{
+    const stageIndex=ORDER_STAGES.findIndex(stage=>stage.key===order.status),history=[...(order.order_status_history||[])].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
+    const timeline=ORDER_STAGES.slice(0,5).map((stage,index)=>{const event=history.find(entry=>entry.to_status===stage.key),cls=index<stageIndex?"is-complete":index===stageIndex?"is-current":"",time=event?`<time>${new Date(event.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</time>`:"";return `<li class="order-stage ${cls}"><span class="order-stage-dot"></span><div><strong>${stage.label}</strong>${time}</div></li>`}).join("");
+    const itemNames=(order.order_items||[]).map(item=>`${Number(item.quantity)}× ${escapeHtml(item.item_name)}`).join(" · ");
+    return `<article class="active-order-card ${String(state.selectedCustomerOrderId)===String(order.id)?"is-selected":""}"><div class="active-order-head"><strong>${escapeHtml(order.customer_known_as||state.profile?.known_as||"Pedido")}</strong><span>${new Date(order.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</span><strong>${currency(order.total)}</strong></div><p>${itemNames}</p><ol class="order-timeline">${timeline}</ol><button type="button" class="ghost-btn" data-order-detail="${escapeHtml(order.id)}">Detalhes</button></article>`;
   }).join("");
 }
 
 function showCustomerOrderDetail(order) {
   state.selectedCustomerOrderId = order.id;
+  document.getElementById("customerOrderDetailTitle").textContent=`Pedido · ${new Date(order.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}`;
   const stages = order.status === "cancelled"
     ? [...ORDER_STAGES, { key: "cancelled", label: "Pedido cancelado" }]
     : ORDER_STAGES;
@@ -883,19 +914,30 @@ function showCustomerOrderDetail(order) {
     <ol class="order-timeline">${timeline}</ol><div class="customer-order-lines">${items}${pooled}</div>
     ${order.notes ? `<p class="customer-order-notes">${escapeHtml(order.notes)}</p>` : ""}
     <div class="order-confirm-total"><span>${order.payment_method === "at_delivery" ? "Pessoalmente na entrega" : "Pix"}</span><strong>${currency(order.total)}</strong></div>`;
-  ui.customerOrderList.hidden = true;
-  ui.customerOrderDetail.hidden = false;
-  ui.backToOrdersListBtn.hidden = false;
+  ui.customerOrderDetailBackdrop.hidden=false;
+  ui.customerOrderDetailBackdrop.classList.add("show");
+  lockPageScroll();
 }
 
-function closeCustomerOrders() {
-  ui.customerOrdersBackdrop.classList.remove("show");
-  ui.customerOrdersBackdrop.hidden = true;
-  if (state.customerOrdersPollingTimer) {
-    clearInterval(state.customerOrdersPollingTimer);
-    state.customerOrdersPollingTimer = null;
+function closeCustomerOrderDetail(){ui.customerOrderDetailBackdrop.classList.remove("show");ui.customerOrderDetailBackdrop.hidden=true;unlockPageScroll()}
+
+function repeatCustomerOrder(orderId){
+  const order=state.customerOrders.find(entry=>String(entry.id)===String(orderId));if(!order)return;
+  const availability=getCurrentAvailabilityMap(),missing=[],added=[];
+  for(const line of order.order_items||[]){
+    const item=state.items.find(entry=>String(entry.id)===String(line.catalog_item_id))||state.items.find(entry=>entry.name?.trim().toLocaleLowerCase()===String(line.item_name||"").trim().toLocaleLowerCase());
+    if(!item||isCartEntryUnavailable({id:item.id},availability)){missing.push(line.item_name);continue}
+    const unavailableOptions=(line.order_item_components||[]).filter(component=>Number(component.quantity)>0).filter(component=>{const current=state.compMap[component.composition_id];return !current||current.is_active===false||(current.tracks_stock!==false&&Number(current.stock)<Number(component.quantity))});
+    unavailableOptions.forEach(component=>missing.push(component.component_name));
+    const snapshot=line.snapshot||{},modState=snapshot.mod_state||{},packageState=snapshot.package_state||{},note=String(line.notes||""),signature=buildEntrySignature(item.id,modState,note,line.unit_price,packageState),existing=state.cart.find(entry=>entry.signature===signature);
+    if(existing){existing.qty+=Number(line.quantity)||1;existing.replayNeedsReview=unavailableOptions.length>0||existing.replayNeedsReview===true}
+    else state.cart.push({id:item.id,signature,name:item.name,price:Number(line.unit_price)||0,optionsText:String(snapshot.options_text||""),note,modState,packageState,qty:Number(line.quantity)||1,replayNeedsReview:unavailableOptions.length>0});
+    added.push(line.item_name);
   }
-  unlockPageScroll();
+  for(const row of order.order_sellable_component_totals||[]){const packageId=String(row.package_id||row.snapshot?.package_id||"");if(!packageId)continue;const componentId=String(row.composition_id||row.snapshot?.composition_id||"");if(!componentId||!state.compMap[componentId]||state.compMap[componentId].is_active===false){missing.push(row.component_name);continue}state.cartGroupAdjustments[packageId]||={};state.cartGroupAdjustments[packageId][componentId]=Number(state.cartGroupAdjustments[packageId][componentId]||0)+Number(row.manual_adjustment||0)}
+  if(order.notes)ui.cartNote.value=[String(ui.cartNote.value||"").trim(),String(order.notes).trim()].filter(Boolean).join("\n");
+  state.cartNotice=missing.length?`Indisponíveis neste momento: ${missing.join(", ")}. Confira o carrinho antes de finalizar.`:added.length?"Pedido carregado para revisão.":"Não foi possível recuperar os itens deste pedido.";state.cartNoticeIsError=missing.length>0;
+  saveCartGroupAdjustments();renderCart();switchCustomerPage("catalog");openCart();
 }
 
 function updateViewportMetrics() {
@@ -2147,7 +2189,7 @@ function openPackageItemModal(item, options, groups) {
     const selection=getSelection();if(!selection.valid){setStatus(selection.message,"err");return}
     const note=(document.getElementById("modalNote")?.value||"").trim(),unitPrice=Math.max(0,itemPriceBreakdown.total+selection.extra);
     const signature=buildEntrySignature(item.id,{},note,unitPrice,selection.packageState);
-    const payload={signature,name:item.name,price:unitPrice,optionsText:selection.optionsText,note,modState:{},packageState:selection.packageState,qty:state.modalQty};
+    const payload={signature,name:item.name,price:unitPrice,optionsText:selection.optionsText,note,modState:{},packageState:selection.packageState,qty:state.modalQty,replayNeedsReview:false};
     if(editIndex!==null){state.cart[editIndex]={...state.cart[editIndex],...payload};renderCart();closeModal();openCart();return}
     const current=state.cart.find(entry=>entry.signature===signature);if(current)current.qty+=state.modalQty;else state.cart.push({id:item.id,...payload});
     renderCart();returnToHomeView();
@@ -2464,6 +2506,7 @@ function openItemModal(item, options = {}) {
         optionsText: selection.optionsText,
         note,
         modState: selection.selectedState,
+        replayNeedsReview: false,
         qty: state.modalQty,
       };
       renderCart();
@@ -2485,6 +2528,7 @@ function openItemModal(item, options = {}) {
         optionsText: selection.optionsText,
         note,
         modState: selection.selectedState,
+        replayNeedsReview: false,
         qty: state.modalQty,
       });
       renderCart();
@@ -2510,10 +2554,13 @@ function bindEvents() {
   });
 
   ui.accountBtn.addEventListener("click", openAccountDialog);
-  ui.myOrdersBtn.addEventListener("click", () => openCustomerOrders());
-  ui.closeAccountBtn.addEventListener("click", closeAccountDialog);
-  ui.accountBackdrop.addEventListener("click", (event) => {
-    if (event.target === ui.accountBackdrop) closeAccountDialog();
+  ui.customerTabs.addEventListener("click", event=>{
+    const button=event.target.closest("[data-customer-page]");if(!button)return;
+    const page=button.dataset.customerPage;
+    if(page!=="catalog"&&!state.user){startCustomerLogin(page);return}
+    if(page==="profile"){openAccountDialog();return}
+    switchCustomerPage(page);
+    if(page==="orders"||page==="tracking")openCustomerOrders(state.selectedCustomerOrderId,page);
   });
   ui.profileForm.addEventListener("submit", saveCustomerProfile);
   ui.closeCheckoutConfirmBtn.addEventListener("click", closeCheckoutConfirmation);
@@ -2522,26 +2569,18 @@ function bindEvents() {
   });
   ui.backToCartBtn.addEventListener("click", closeCheckoutConfirmation);
   ui.confirmAppOrderBtn.addEventListener("click", submitAppOrder);
-  ui.closeCustomerOrdersBtn.addEventListener("click", closeCustomerOrders);
-  ui.customerOrdersBackdrop.addEventListener("click", (event) => {
-    if (event.target === ui.customerOrdersBackdrop) closeCustomerOrders();
-  });
-  ui.backToOrdersListBtn.addEventListener("click", () => {
-    state.selectedCustomerOrderId = null;
-    ui.customerOrderDetail.hidden = true;
-    ui.customerOrderList.hidden = false;
-    ui.backToOrdersListBtn.hidden = true;
-  });
+  ui.closeCustomerOrderDetailBtn.addEventListener("click",closeCustomerOrderDetail);
+  ui.customerOrderDetailBackdrop.addEventListener("click",event=>{if(event.target===ui.customerOrderDetailBackdrop)closeCustomerOrderDetail()});
   ui.customerOrderList.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-customer-order]");
-    if (!button) return;
-    const order = state.customerOrders.find((entry) => entry.id === button.dataset.customerOrder);
-    if (order) showCustomerOrderDetail(order);
+    const follow=event.target.closest("[data-customer-order]"),repeat=event.target.closest("[data-repeat-order]");
+    if(follow){const order=state.customerOrders.find(entry=>String(entry.id)===String(follow.dataset.customerOrder));if(order&&["pending_confirmation","received","confirmed","production","delivery"].includes(order.status))openCustomerOrders(order.id,"tracking");else if(order)showCustomerOrderDetail(order);return}
+    if(repeat){refreshDataNow({showError:false}).then(()=>repeatCustomerOrder(repeat.dataset.repeatOrder));return}
   });
+  ui.activeCustomerOrders.addEventListener("click",event=>{const button=event.target.closest("[data-order-detail]");if(!button)return;const order=state.customerOrders.find(entry=>String(entry.id)===String(button.dataset.orderDetail));if(order)showCustomerOrderDetail(order)});
   ui.signOutBtn.addEventListener("click", async () => {
     const { error } = await db.auth.signOut();
     if (error) setStatus("Não foi possível sair da conta.", "err");
-    else closeAccountDialog();
+    else {if(state.customerOrdersPollingTimer){clearInterval(state.customerOrdersPollingTimer);state.customerOrdersPollingTimer=null}switchCustomerPage("catalog")}
   });
 
   ui.modal.addEventListener("click", (event) => {

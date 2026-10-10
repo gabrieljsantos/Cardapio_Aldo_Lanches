@@ -1,17 +1,17 @@
 # Graph Report - Cardapio_Aldo_Lanches  (2026-10-10)
 
 ## Corpus Check
-- 3 files · ~95,242 words
+- 3 files · ~95,454 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 4 file(s) not represented in the graph (top: .css 2, (none) 1, .cdr 1)
 
 ## Summary
-- 157 nodes · 461 edges · 14 communities (13 shown, 1 thin omitted)
-- Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 17 edges (avg confidence: 0.85)
+- 161 nodes · 485 edges · 16 communities (15 shown, 1 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 16 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `35e9af30`
+- Built from commit: `ce5c92be`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -28,20 +28,22 @@
 - loadData
 - renderMenu
 - init
-- getVisibleItems
+- scheduleVisibleReactLoop
+- getItemPackageGroups
 - normalize
+- getVisibleItems
 
 ## God Nodes (most connected - your core abstractions)
-1. `renderCart()` - 24 edges
-2. `bindEvents()` - 23 edges
+1. `renderCart()` - 26 edges
+2. `bindEvents()` - 26 edges
 3. `openPackageItemModal()` - 19 edges
-4. `openItemModal()` - 16 edges
-5. `submitAppOrder()` - 15 edges
+4. `submitAppOrder()` - 16 edges
+5. `openItemModal()` - 16 edges
 6. `renderMenu()` - 14 edges
 7. `init()` - 14 edges
 8. `startAppCheckout()` - 13 edges
-9. `setStatus()` - 12 edges
-10. `renderBranch()` - 12 edges
+9. `openCheckoutConfirmation()` - 12 edges
+10. `setStatus()` - 12 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `bindEvents()` --indirect_call--> `removeUnavailableCartItems()`  [INFERRED]
@@ -58,23 +60,23 @@
 ## Import Cycles
 - None detected.
 
-## Communities (14 total, 1 thin omitted)
+## Communities (16 total, 1 thin omitted)
 
 ### Community 0 - "bindEvents"
-Cohesion: 0.18
-Nodes (22): bindEvents(), closeAccountDialog(), closeCart(), closeCheckoutConfirmation(), closeCustomerOrders(), getUserDisplayName(), hasCompleteOrderProfile(), initializeCustomerAuth() (+14 more)
+Cohesion: 0.23
+Nodes (21): bindEvents(), closeCart(), closeCheckoutConfirmation(), closeCustomerOrderDetail(), hasCompleteOrderProfile(), initializeCustomerAuth(), loadCustomerProfile(), openAccountDialog() (+13 more)
 
 ### Community 1 - "openPackageItemModal"
-Cohesion: 0.19
-Nodes (24): buildEntrySignature(), buildOrderPackageState(), buildSearchCompositionText(), closeModal(), createItemCard(), currency(), escapeHtml(), getItemPackageGroups() (+16 more)
+Cohesion: 0.18
+Nodes (23): applySearch(), buildEntrySignature(), buildSearchCompositionText(), closeModal(), createItemCard(), currency(), escapeHtml(), getItemPhotos() (+15 more)
 
 ### Community 2 - "renderCart"
-Cohesion: 0.25
-Nodes (18): addToCart(), adjustSellableGroup(), buildOrderMessage(), buildSellableGroupOrderPayload(), checkoutWhatsApp(), getCartTotals(), getCurrentAvailabilityMap(), getSellableGroupTotals() (+10 more)
+Cohesion: 0.22
+Nodes (20): adjustSellableGroup(), buildEntryOptionsText(), buildOrderMessage(), buildSellableGroupOrderPayload(), checkoutWhatsApp(), getCartTotals(), getCurrentAvailabilityMap(), getSellableGroupTotals() (+12 more)
 
 ### Community 3 - "js/index.js"
-Cohesion: 0.14
-Nodes (14): copyOrderMessage(), db, getVisibleCards(), isValidImageUrl(), nextVisibleReactDelayMs(), ORDER_STAGES, packageMemberAvailable(), packageQuantityLimit() (+6 more)
+Cohesion: 0.17
+Nodes (10): addToCart(), bindViewportMetrics(), copyOrderMessage(), db, getUserDisplayName(), ORDER_STAGES, state, ui (+2 more)
 
 ### Community 4 - "backup_esquema_2026-04-04/index.js"
 Cohesion: 0.22
@@ -89,12 +91,12 @@ Cohesion: 0.31
 Nodes (10): buildEntrySignature(), closeModal(), createItemCard(), currency(), escapeHtml(), getItemPhotos(), isValidImageUrl(), openItemModal() (+2 more)
 
 ### Community 7 - "init"
-Cohesion: 0.25
-Nodes (9): bindRealtime(), bindViewportMetrics(), init(), renderHeader(), restoreCart(), scheduleRefreshFromRealtime(), setupHeaderLogoScale(), startAvailabilityPolling() (+1 more)
+Cohesion: 0.33
+Nodes (7): bindRealtime(), init(), renderHeader(), restoreCart(), scheduleRefreshFromRealtime(), setupHeaderLogoScale(), startAvailabilityPolling()
 
 ### Community 8 - "renderMenu"
-Cohesion: 0.25
-Nodes (8): applySearch(), renderCategoryNav(), renderMenu(), restorePhotoState(), rotateCardPhotos(), savePhotoState(), setupMenuReveal(), startPhotoRotation()
+Cohesion: 0.29
+Nodes (7): renderCategoryNav(), renderMenu(), restorePhotoState(), rotateCardPhotos(), savePhotoState(), setupMenuReveal(), startPhotoRotation()
 
 ### Community 9 - "loadData"
 Cohesion: 0.33
@@ -108,7 +110,15 @@ Nodes (6): buildCategoryTree(), renderBranch(), renderCategoryNav(), renderMenu(
 Cohesion: 0.50
 Nodes (5): init(), loadData(), renderHeader(), setStatus(), setupHeaderLogoScale()
 
-### Community 12 - "getVisibleItems"
+### Community 12 - "scheduleVisibleReactLoop"
+Cohesion: 0.50
+Nodes (4): getVisibleCards(), nextVisibleReactDelayMs(), scheduleVisibleReactLoop(), triggerCardVisibleReact()
+
+### Community 13 - "getItemPackageGroups"
+Cohesion: 0.43
+Nodes (7): buildOrderPackageState(), getItemPackageGroups(), getItemPriceBreakdown(), getLegacyCompositionCharge(), getPackageCompositionCharge(), getPackageDefaults(), syncCartWithCurrentCatalog()
+
+### Community 15 - "getVisibleItems"
 Cohesion: 0.33
 Nodes (6): computeActiveItemIds(), getCompositionStock(), getDayKey(), getVisibleItems(), isGroupActive(), toMinutes()
 
@@ -120,15 +130,13 @@ Nodes (6): computeActiveItemIds(), getCompositionStock(), getDayKey(), getVisibl
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `renderCart()` connect `renderCart` to `bindEvents`, `openPackageItemModal`, `js/index.js`, `init`?**
-  _High betweenness centrality (0.008) - this node is a cross-community bridge._
-- **Why does `bindEvents()` connect `bindEvents` to `openPackageItemModal`, `renderCart`, `js/index.js`, `init`, `renderMenu`?**
-  _High betweenness centrality (0.008) - this node is a cross-community bridge._
-- **Why does `openPackageItemModal()` connect `openPackageItemModal` to `bindEvents`, `renderCart`, `js/index.js`?**
+- **Why does `bindEvents()` connect `bindEvents` to `openPackageItemModal`, `renderCart`, `js/index.js`, `init`?**
+  _High betweenness centrality (0.010) - this node is a cross-community bridge._
+- **Why does `renderCart()` connect `renderCart` to `bindEvents`, `openPackageItemModal`, `js/index.js`, `init`, `getItemPackageGroups`?**
+  _High betweenness centrality (0.009) - this node is a cross-community bridge._
+- **Why does `openPackageItemModal()` connect `openPackageItemModal` to `bindEvents`, `renderCart`, `js/index.js`, `getItemPackageGroups`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
-- **Are the 9 inferred relationships involving `bindEvents()` (e.g. with `closeAccountDialog()` and `closeCart()`) actually correct?**
-  _`bindEvents()` has 9 INFERRED edges - model-reasoned connections that need verification._
+- **Are the 8 inferred relationships involving `bindEvents()` (e.g. with `closeCart()` and `closeCheckoutConfirmation()`) actually correct?**
+  _`bindEvents()` has 8 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `ORDER_STAGES`, `db`, `state` to the rest of the system?**
   _7 weakly-connected nodes found - possible documentation gaps or missing edges._
-- **Should `js/index.js` be split into smaller, more focused modules?**
-  _Cohesion score 0.13970588235294118 - nodes in this community are weakly interconnected._
