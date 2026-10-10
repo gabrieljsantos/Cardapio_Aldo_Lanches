@@ -682,9 +682,9 @@ function renderCart() {
       <div class="cart-pooled-component"><div class="cart-pooled-component-identity">${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<div><strong>${escapeHtml(title)}</strong>${presentation?.description?`<small>${escapeHtml(presentation.description)}</small>`:""}</div></div>
         <div class="qty-wrap"><button type="button" class="qty-btn" data-pool-step="-1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" aria-label="Remover ${escapeHtml(title)}" ${component.quantity<=0?"disabled":""}>−</button><span class="qty-val">${component.quantity}</span><button type="button" class="qty-btn" data-pool-step="1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" aria-label="Adicionar ${escapeHtml(title)}" title="${component.maxQuantity<=component.quantity&&component.member.component.tracks_stock!==false?"Limite de estoque atingido":"Adicionar"}" ${component.quantity>=component.maxQuantity?"disabled":""}>+</button></div>
       </div>`}).join("");
-    const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),entitled=group.pack.franchise_mode==="shared"?group.allowance:[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0),allowance = `<p class="item-desc">No seu carrinho, você tem direito a ${entitled} ${escapeHtml(categoryName)}. Você já escolheu ${[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0)}; ainda pode escolher ${group.freeRemaining}.</p>`;
+    const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),entitled=group.pack.franchise_mode==="shared"?group.allowance:[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0),chosen=[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0),extraQuantity=group.pack.franchise_mode==="shared"?Math.max(0,chosen-group.allowance):[...group.components.values()].reduce((sum,component)=>sum+Math.max(0,component.quantity-component.allowance),0),extraPrice=extraQuantity>0?`<span class="sellable-price-highlight cart-extra-price">Extras (${extraQuantity}): <strong>${currency(group.totalPrice)}</strong></span>`:"",allowance = `<div class="cart-sellable-summary"><p class="item-desc">No seu carrinho, você tem direito a ${entitled} ${escapeHtml(categoryName)}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.</p>${extraPrice}</div>`;
     const stockWarning=[...group.components.values()].some(component=>component.quantity>component.maxQuantity)?'<p class="cart-item-warning">A quantidade supera o estoque disponível.</p>':"";
-    return `<section class="cart-item cart-sellable-group"><h4>${escapeHtml(categoryName)}</h4>${allowance}${stockWarning}${components}<strong>${currency(group.totalPrice)}</strong></section>`;
+    return `<section class="cart-item cart-sellable-group"><h4>${escapeHtml(categoryName)}</h4>${allowance}${stockWarning}${components}</section>`;
   }).join("");
   ui.cartList.innerHTML = itemMarkup + pooledMarkup;
 
@@ -968,8 +968,28 @@ function renderActiveCustomerOrders() {
     const stageIndex=ORDER_STAGES.findIndex(stage=>stage.key===order.status),history=[...(order.order_status_history||[])].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at));
     const timeline=ORDER_STAGES.slice(0,5).map((stage,index)=>{const event=history.find(entry=>entry.to_status===stage.key),cls=index<stageIndex?"is-complete":index===stageIndex?"is-current":"",time=event?`<time>${new Date(event.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</time>`:"";return `<li class="order-stage ${cls}"><span class="order-stage-dot"></span><div><strong>${stage.label}</strong>${time}</div></li>`}).join("");
     const itemNames=(order.order_items||[]).map(item=>`${Number(item.quantity)}× ${escapeHtml(item.item_name)}`).join(" · ");
-    return `<article class="active-order-card ${String(state.selectedCustomerOrderId)===String(order.id)?"is-selected":""}"><div class="active-order-head"><strong>${escapeHtml(order.customer_known_as||state.profile?.known_as||"Pedido")}</strong><span>${new Date(order.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</span><strong>${currency(order.total)}</strong></div><p>${itemNames}</p><ol class="order-timeline">${timeline}</ol><button type="button" class="ghost-btn" data-order-detail="${escapeHtml(order.id)}">Detalhes</button></article>`;
+    const receiveButton=order.status==="delivery"?`<button type="button" class="ghost-btn receive-order-button" data-confirm-order-received="${escapeHtml(order.id)}">Recebi o pedido</button>`:"";
+    return `<article class="active-order-card ${String(state.selectedCustomerOrderId)===String(order.id)?"is-selected":""}"><div class="active-order-head"><strong>${escapeHtml(order.customer_known_as||state.profile?.known_as||"Pedido")}</strong><span>${new Date(order.created_at).toLocaleString("pt-BR",{dateStyle:"short",timeStyle:"short"})}</span><strong>${currency(order.total)}</strong></div><p>${itemNames}</p><ol class="order-timeline">${timeline}</ol><div class="active-order-actions"><button type="button" class="ghost-btn" data-order-detail="${escapeHtml(order.id)}">Detalhes</button>${receiveButton}</div></article>`;
   }).join("");
+}
+
+async function confirmCustomerOrderReceived(orderId, button) {
+  const order=state.customerOrders.find(entry=>String(entry.id)===String(orderId));
+  if(!state.user||!order||order.status!=="delivery")return;
+  if(!window.confirm("Confirmar que você recebeu este pedido?"))return;
+  if(button)button.disabled=true;
+  const wasOrderDetailOpen=ui.customerOrderDetailBackdrop.classList.contains("show");
+  try{
+    const {error}=await db.rpc("customer_confirm_order_received",{target_order:order.id});
+    if(error)throw error;
+    setStatus("Recebimento confirmado.","ok");
+    await loadCustomerOrders(order.id);
+    if(wasOrderDetailOpen)closeCustomerOrderDetail();
+  }catch(error){
+    console.error("Falha ao confirmar recebimento:",error);
+    setStatus(/customer_confirm_order_received|schema cache|function/i.test(error.message||"")?"A confirmação de recebimento ainda não foi habilitada no sistema.":"Não foi possível confirmar o recebimento.","err");
+    if(button)button.disabled=false;
+  }
 }
 
 function showCustomerOrderDetail(order) {
@@ -995,7 +1015,7 @@ function showCustomerOrderDetail(order) {
   ui.customerOrderDetail.innerHTML = `<div class="order-tracking-head"><strong>${escapeHtml(order.customer_known_as || state.profile?.known_as || "Pedido")}</strong><span>${new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></div>
     <ol class="order-timeline">${timeline}</ol><div class="customer-order-lines">${items}${pooled}</div>
     ${order.notes ? `<p class="customer-order-notes">${escapeHtml(order.notes)}</p>` : ""}
-    <div class="order-confirm-total"><span>${order.payment_method === "at_delivery" ? "Pessoalmente na entrega" : "Pix"}</span><strong>${currency(order.total)}</strong></div>`;
+    <div class="order-confirm-total"><span>${order.payment_method === "at_delivery" ? "Pessoalmente na entrega" : "Pix"}</span><strong>${currency(order.total)}</strong></div>${order.status==="delivery"?`<button type="button" class="ghost-btn receive-order-button" data-confirm-order-received="${escapeHtml(order.id)}">Recebi o pedido</button>`:""}`;
   ui.customerOrderDetailBackdrop.hidden=false;
   ui.customerOrderDetailBackdrop.classList.add("show");
   lockPageScroll();
@@ -2647,7 +2667,8 @@ function bindEvents() {
     if(follow){const order=state.customerOrders.find(entry=>String(entry.id)===String(follow.dataset.customerOrder));if(order&&["pending_confirmation","received","confirmed","production","delivery"].includes(order.status))openCustomerOrders(order.id,"tracking");else if(order)showCustomerOrderDetail(order);return}
     if(repeat){refreshDataNow({showError:false}).then(()=>repeatCustomerOrder(repeat.dataset.repeatOrder));return}
   });
-  ui.activeCustomerOrders.addEventListener("click",event=>{const button=event.target.closest("[data-order-detail]");if(!button)return;const order=state.customerOrders.find(entry=>String(entry.id)===String(button.dataset.orderDetail));if(order)showCustomerOrderDetail(order)});
+  ui.activeCustomerOrders.addEventListener("click",event=>{const receive=event.target.closest("[data-confirm-order-received]");if(receive){confirmCustomerOrderReceived(receive.dataset.confirmOrderReceived,receive);return}const button=event.target.closest("[data-order-detail]");if(!button)return;const order=state.customerOrders.find(entry=>String(entry.id)===String(button.dataset.orderDetail));if(order)showCustomerOrderDetail(order)});
+  ui.customerOrderDetail.addEventListener("click",event=>{const receive=event.target.closest("[data-confirm-order-received]");if(receive)confirmCustomerOrderReceived(receive.dataset.confirmOrderReceived,receive)});
   ui.signOutBtn.addEventListener("click", async () => {
     const { error } = await db.auth.signOut();
     if (error) setStatus("Não foi possível sair da conta.", "err");

@@ -11,6 +11,6 @@
   "9": "loadData",
   "10": "renderMenu",
   "11": "init",
-  "12": "scheduleVisibleReactLoop",
+  "12": "getVisibleItems",
   "13": "normalize"
 }

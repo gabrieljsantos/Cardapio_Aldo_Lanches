@@ -228,6 +228,10 @@ img {
 .active-order-card{padding:16px;border:1px solid var(--line);border-radius:var(--radius-md);background:#fff;box-shadow:var(--shadow-sm)}
 .active-order-card.is-selected{border-color:#f97316;box-shadow:0 0 0 3px #f9731622,var(--shadow-sm)}
 .active-order-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.active-order-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px;margin-top:10px}
+.receive-order-button{border-color:#b7dfc1;background:#eaf7ed;color:#176b32;font-weight:700}
+.receive-order-button:hover{border-color:#75bd86;background:#d8f0dd;color:#145a2b}
+.receive-order-button:disabled{opacity:.6;cursor:wait}
 .active-order-card>p{margin:10px 0;color:var(--muted);line-height:1.5}
 .active-order-card>.order-timeline{margin:14px 0 4px}
 .order-tracking-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: var(--muted); }
@@ -1785,4 +1789,9 @@ body.modal-open {
 .sellable-entitlement{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .sellable-price-highlight{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;background:#ffead7;color:#9a3412;font-weight:700;white-space:normal}
 .sellable-price-highlight strong{font-size:1rem;color:#7c2d12}
+.cart-sellable-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.cart-sellable-summary .item-desc{flex:1 1 260px;margin:0}
+.cart-extra-price{flex:0 0 auto;padding:6px 11px;border:1px solid #f6c697;font-size:.9rem}
+.cart-extra-price strong{font-size:1.08rem!important}
+@media(max-width:520px){.cart-sellable-summary{align-items:flex-start}.cart-extra-price{margin-left:auto}}
 @media(max-width:520px){.customer-tabs{gap:3px;padding:4px}.customer-tab{min-height:42px;padding:7px 6px;font-size:.75rem}.page-shell{padding-bottom:88px}.cart-fab{right:10px;bottom:calc(82px + env(safe-area-inset-bottom));min-width:138px;padding:10px 12px}.sellable-card-quantity .qty-btn{width:34px;height:36px;min-width:34px}.sellable-component-card{grid-template-columns:minmax(0,1fr)!important}.sellable-component-card .item-photo{width:100%;height:clamp(125px,45vw,190px)}}
