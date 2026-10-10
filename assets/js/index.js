@@ -1383,7 +1383,7 @@ function buildInlineCompositionText(itemId) {
     const seen = new Set();
     const names = [];
     const formatQty = value => Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
-    packageGroups.forEach(group => group.members.forEach(member => {
+    packageGroups.filter(group => group.pack.show_defaults_in_item !== false).forEach(group => group.members.forEach(member => {
       const quantity = Math.max(0, Number(member.config.default_quantity || 0));
       const componentId = String(member.component.id);
       const name = String(member.component.name || "").trim();
