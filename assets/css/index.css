@@ -196,6 +196,7 @@ img {
 .order-confirm-item, .customer-order-line { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .order-confirm-item>div, .customer-order-line>div { display: grid; gap: 4px; }
 .order-confirm-item small, .customer-order-line small { color: var(--muted); }
+.order-confirm-presentations{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px}.order-confirm-presentations img{width:38px;height:38px;border-radius:8px;object-fit:cover}.order-confirm-presentations small{color:var(--text)}
 .order-confirm-total { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
 .order-payment-label { display: grid; gap: 7px; font-weight: 600; }
 .order-payment-label select { min-height: 44px; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; font: inherit; }
@@ -713,6 +714,10 @@ img {
 .item-desc {
   text-wrap: pretty;
 }
+
+.sellable-entitlement{margin:0 0 10px;padding:9px 12px;border:1px solid #f2d8bd;border-radius:10px;background:#fff8ef;color:#684424;font-size:.9rem;font-weight:600}
+.sellable-component-card .item-photo{width:100%;height:clamp(110px,18vw,190px);object-fit:cover;border-radius:10px;background:var(--surface-soft)}
+.sellable-component-card .add-btn{cursor:pointer}
 
 .item-comp-inline {
   color: #4b5f6c;
@@ -1367,6 +1372,12 @@ body.modal-open {
   justify-content: space-between;
   align-items: center;
 }
+
+.cart-pooled-component{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;padding:8px 0;border-top:1px solid var(--line)}
+.cart-pooled-component-identity{display:flex;align-items:center;gap:9px;min-width:0}
+.cart-pooled-component-identity img,.customer-component-order-line>img{width:48px;height:48px;object-fit:cover;border-radius:9px;background:var(--surface-soft);flex-shrink:0}
+.cart-pooled-component-identity>div{display:grid;gap:3px;min-width:0}.cart-pooled-component-identity small{color:var(--muted)}
+.customer-component-order-line{align-items:center}.customer-component-order-line>div{flex:1}
 
 .cart-item-price {
   font-weight: 700;

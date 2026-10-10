@@ -26,6 +26,7 @@ const state = {
   associations: [],
   ingredientPackages: [],
   packageComponents: [],
+  packagePresentations: [],
   itemPackages: [],
   itemComponentConfigs: [],
   groups: [],
@@ -297,7 +298,7 @@ function getCartTotals() {
 
 function getSellableGroupTotals() {
   const groups = new Map();
-  for (const pack of state.ingredientPackages.filter(candidate => candidate.is_active !== false && candidate.is_sellable === true && candidate.sellable_category_id)) {
+  for (const pack of state.ingredientPackages.filter(candidate => candidate.is_active !== false && candidate.is_sellable === true && state.categories.some(category=>String(category.component_package_id||"")===String(candidate.id)))) {
     groups.set(String(pack.id), { packageId:String(pack.id), pack, components:new Map(), allowance:0, totalPrice:0 });
     for (const row of state.packageComponents.filter(entry => String(entry.package_id) === String(pack.id))) {
       const member = { row, component:state.compMap[row.composition_id], config:{ default_quantity:0, free_allowance:0, max_quantity:state.compMap[row.composition_id]?.max_quantity ?? 4, consumption_per_unit:1, is_enabled:true } };
@@ -337,7 +338,7 @@ function getSellableGroupTotals() {
         group.totalPrice += Math.max(0, component.quantity - allowance) * price;
       }
     }
-    if (group.pack.franchise_mode !== "shared") group.freeRemaining = Math.max(0, [...group.components.values()].reduce((sum, component) => sum + component.allowance, 0) - totalQuantity);
+    if (group.pack.franchise_mode !== "shared") group.freeRemaining = [...group.components.values()].reduce((sum, component) => sum + Math.max(0,component.allowance-component.quantity), 0);
     if (group.pack.franchise_mode === "shared") {
       const price = Number(group.components.values().next().value?.member.component.price || 0);
       group.totalPrice = Math.max(0, totalQuantity - group.allowance) * price;
@@ -345,6 +346,16 @@ function getSellableGroupTotals() {
     }
   }
   return [...groups.values()];
+}
+
+function updateSellableEntitlementNotices(groups=getSellableGroupTotals()) {
+  document.querySelectorAll("[data-sellable-entitlement]").forEach(notice=>{
+    const group=groups.find(entry=>String(entry.packageId)===String(notice.dataset.sellableEntitlement));
+    if(!group)return;
+    const chosen=[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0);
+    const entitled=group.pack.franchise_mode==="shared"?group.allowance:[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0);
+    notice.textContent=`No seu carrinho, você tem direito a ${entitled} ${notice.dataset.categoryName}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.`;
+  });
 }
 
 function saveCartGroupAdjustments() {
@@ -475,6 +486,7 @@ function renderCart() {
   const { count, total } = getCartTotals();
   const availabilityMap = getCurrentAvailabilityMap();
   const sellableGroups=getSellableGroupTotals();
+  updateSellableEntitlementNotices(sellableGroups);
   const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap))
     || sellableGroups.some(group=>[...group.components.values()].some(component=>component.quantity>component.maxQuantity));
 
@@ -523,14 +535,13 @@ function renderCart() {
     `)
     .join("");
   const pooledMarkup = sellableGroups.map(group => {
-    const components = [...group.components.entries()].map(([componentId, component]) => `
-      <div class="cart-item-bottom">
-        <strong>${escapeHtml(component.member.component.name)}</strong>
+    const components = [...group.components.entries()].map(([componentId, component]) => {const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId)),title=presentation?.display_name||component.member.component.name,photo=safeImageUrl(presentation?.photo_url_1||"");return `
+      <div class="cart-pooled-component"><div class="cart-pooled-component-identity">${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<div><strong>${escapeHtml(title)}</strong>${presentation?.description?`<small>${escapeHtml(presentation.description)}</small>`:""}</div></div>
         <div class="qty-wrap"><button type="button" class="qty-btn" data-pool-step="-1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" ${component.quantity<=0?"disabled":""}>−</button><span class="qty-val">${component.quantity}</span><button type="button" class="qty-btn" data-pool-step="1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" ${component.quantity>=component.maxQuantity?"disabled":""}>+</button></div>
-      </div>`).join("");
-    const allowance = group.pack.franchise_mode === "shared" ? `<p class="item-desc">Você ainda tem direito a ${group.freeRemaining} ${escapeHtml(packageCustomerName(group.pack))}.</p>` : "";
+      </div>`}).join("");
+    const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),entitled=group.pack.franchise_mode==="shared"?group.allowance:[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0),allowance = `<p class="item-desc">No seu carrinho, você tem direito a ${entitled} ${escapeHtml(categoryName)}. Você já escolheu ${[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0)}; ainda pode escolher ${group.freeRemaining}.</p>`;
     const stockWarning=[...group.components.values()].some(component=>component.quantity>component.maxQuantity)?'<p class="cart-item-warning">A quantidade supera o estoque disponível.</p>':"";
-    return `<section class="cart-item cart-sellable-group"><h4>${escapeHtml(packageCustomerName(group.pack))}</h4>${allowance}${stockWarning}${components}<strong>${currency(group.totalPrice)}</strong></section>`;
+    return `<section class="cart-item cart-sellable-group"><h4>${escapeHtml(categoryName)}</h4>${allowance}${stockWarning}${components}<strong>${currency(group.totalPrice)}</strong></section>`;
   }).join("");
   ui.cartList.innerHTML = itemMarkup + pooledMarkup;
 
@@ -620,7 +631,7 @@ function openCheckoutConfirmation() {
     escapeHtml(state.profile?.phone || ""),
     escapeHtml([state.profile?.street, state.profile?.landmark, state.profile?.address_extra].filter(Boolean).join(" · "))
   ].filter(Boolean).join("<br>");
-  const pooledConfirm=getSellableGroupTotals().map(group=>`<article class="order-confirm-item"><div><strong>${escapeHtml(packageCustomerName(group.pack))}</strong><small>${[...group.components.values()].filter(component=>component.quantity>0).map(component=>`${component.quantity}× ${escapeHtml(component.member.component.name)}`).join(" · ")}</small>${group.pack.franchise_mode==="shared"?`<small>Você ainda tem direito a ${group.freeRemaining} ${escapeHtml(packageCustomerName(group.pack))}.</small>`:""}</div><span>${currency(group.totalPrice)}</span></article>`).join("");
+  const pooledConfirm=getSellableGroupTotals().map(group=>{const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),components=[...group.components.entries()].filter(([,component])=>component.quantity>0).map(([componentId,component])=>{const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId)),photo=safeImageUrl(presentation?.photo_url_1||"");return `${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<small>${component.quantity}× ${escapeHtml(presentation?.display_name||component.member.component.name)}</small>`}).join("");return `<article class="order-confirm-item"><div><strong>${escapeHtml(categoryName)}</strong><div class="order-confirm-presentations">${components}</div><small>Você ainda pode escolher ${group.freeRemaining} ${escapeHtml(categoryName)}.</small></div><span>${currency(group.totalPrice)}</span></article>`}).join("");
   ui.checkoutConfirmItems.innerHTML = state.cart.map((entry) => `
     <article class="order-confirm-item">
       <div><strong>${Number(entry.qty)}× ${escapeHtml(entry.name)}</strong>
@@ -681,35 +692,20 @@ function syncCartWithCurrentCatalog() {
   state.cart.forEach((entry) => {
     const item = state.items.find((candidate) => String(candidate.id) === String(entry.id));
     if (!item) return;
-    let unitPrice = Number(item.price || 0);
+    const basePrice = Math.max(0, Number(item.price || 0));
     const packageGroups = getItemPackageGroups(item.id);
+    let compositionPrice = 0;
     if (packageGroups.length) {
       for (const group of packageGroups) {
-        const packageId = String(group.pack.id), saved = entry.packageState?.[packageId] || {};
-        for (const member of group.members) {
-          const componentId = String(member.row.composition_id);
-          const limit = Math.min(packageQuantityLimit(group.pack), Number(member.config.max_quantity ?? member.component.max_quantity ?? 4));
-          const standard = Math.min(limit, Math.max(0, Number(member.config.default_quantity || 0)));
-          const selected = Math.min(limit, Math.max(0, Number(saved[componentId] ?? standard)));
-          const free = Math.max(0, Number(member.config.free_allowance || 0));
-          const delta = Math.max(0, selected - free) - Math.max(0, standard - free);
-          unitPrice += delta * Number(member.component.price || 0);
-        }
+        if (group.pack.is_sellable === true) continue;
+        const packageId = String(group.pack.id), saved = entry.packageState?.[packageId] || getPackageDefaults(group);
+        compositionPrice += getPackageCompositionCharge(group, saved);
       }
     } else {
-      state.associations.filter((association) => association.owner_id === item.id).forEach((association) => {
-        const component = state.compMap[association.composition_id];
-        if (!component) return;
-        const defaultQuantity = Math.max(0, Number(association.link_value || 0));
-        let selected = Math.max(0, Number(entry.modState?.[association.id] ?? defaultQuantity));
-        if (association.link_type === "delta") selected = Math.min(2, selected);
-        else if (association.link_type === "complementary") selected = Math.min(1, selected);
-        else if (association.link_type === "scalable") selected = Math.min(Number(component.max_quantity ?? 4), selected);
-        unitPrice += (selected - defaultQuantity) * Number(component.price || 0);
-      });
+      compositionPrice = getLegacyCompositionCharge(item.id, entry.modState);
     }
     entry.name = item.name;
-    entry.price = Math.max(0, unitPrice);
+    entry.price = Math.max(0, basePrice + compositionPrice);
   });
 
   renderCart();
@@ -739,7 +735,7 @@ async function submitAppOrder() {
       mod_state: entry.modState && typeof entry.modState === "object" ? entry.modState : {},
       package_state: buildOrderPackageState(entry)
     }));
-    const { data: orderId, error } = await db.rpc("submit_app_order_with_groups", {
+    const { data: orderId, error } = await db.rpc("submit_app_order_priced", {
       p_items: payload,
       p_notes: String(ui.cartNote.value || "").trim() || null,
       p_payment_method: ui.orderPaymentMethod.value,
@@ -848,7 +844,7 @@ function showCustomerOrderDetail(order) {
       .map((component) => `${escapeHtml(component.component_name)}${Number(component.quantity) > 1 ? ` ×${Number(component.quantity)}` : ""}`).join(" · ");
     return `<article class="customer-order-line"><div><strong>${Number(item.quantity)}× ${escapeHtml(item.item_name)}</strong>${components ? `<small>${components}</small>` : ""}${item.notes ? `<small>${escapeHtml(item.notes)}</small>` : ""}</div><span>${currency(Number(item.unit_price) * Number(item.quantity))}</span></article>`;
   }).join("");
-  const pooled = (order.order_sellable_component_totals || []).filter(component => Number(component.quantity) > 0).map(component => `<article class="customer-order-line"><div><strong>${escapeHtml(component.customer_name || component.group_name)} · ${escapeHtml(component.component_name)}</strong><small>${Number(component.quantity)}×${Number(component.manual_adjustment) ? ` · ajuste manual ${Number(component.manual_adjustment) > 0 ? "+" : ""}${Number(component.manual_adjustment)}` : ""}</small></div><span>${currency(Number(component.charged_quantity || 0) * Number(component.unit_price || 0))}</span></article>`).join("");
+  const pooled = (order.order_sellable_component_totals || []).filter(component => Number(component.quantity) > 0).map(component => {const photo=safeImageUrl(component.snapshot?.representation?.photo_url_1||"");return `<article class="customer-order-line customer-component-order-line">${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<div><strong>${escapeHtml(component.component_name)}</strong><small>${Number(component.quantity)}×${Number(component.manual_adjustment) ? ` · ajuste manual ${Number(component.manual_adjustment) > 0 ? "+" : ""}${Number(component.manual_adjustment)}` : ""}${component.snapshot?.representation?.description?` · ${escapeHtml(component.snapshot.representation.description)}`:""}</small></div><span>${currency(Number(component.charged_quantity || 0) * Number(component.unit_price || 0))}</span></article>`}).join("");
   ui.customerOrderDetail.innerHTML = `<div class="order-tracking-head"><strong>${escapeHtml(order.customer_known_as || state.profile?.known_as || "Pedido")}</strong><span>${new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></div>
     <ol class="order-timeline">${timeline}</ol><div class="customer-order-lines">${items}${pooled}</div>
     ${order.notes ? `<p class="customer-order-notes">${escapeHtml(order.notes)}</p>` : ""}
@@ -964,11 +960,13 @@ function buildOrderMessage() {
   });
 
   getSellableGroupTotals().forEach(group => {
-    lines.push(`• ${packageCustomerName(group.pack)}:`);
-    for (const component of group.components.values()) {
-      if (component.quantity > 0) lines.push(`  ${component.quantity}x ${component.member.component.name}`);
+    const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack);
+    lines.push(`• ${categoryName}:`);
+    for (const [componentId,component] of group.components) {
+      const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId));
+      if (component.quantity > 0) lines.push(`  ${component.quantity}x ${presentation?.display_name||component.member.component.name}`);
     }
-    if (group.pack.franchise_mode === "shared") lines.push(`  Você ainda tem direito a ${group.freeRemaining} ${packageCustomerName(group.pack)}.`);
+    if (group.pack.franchise_mode !== "none") lines.push(`  Você ainda pode escolher ${group.freeRemaining} ${categoryName}.`);
     if (group.totalPrice > 0) lines.push(`  Adicionais: ${currency(group.totalPrice)}`);
     lines.push("");
   });
@@ -1222,6 +1220,12 @@ function getCompositionStock(item) {
   return capacities.length ? Math.max(0, Math.min(...capacities)) : Math.max(0, Number(item.stock || 0));
 }
 
+function sortItemsAlphabetically(rows) {
+  return [...rows].sort((a, b) =>
+    String(a?.name || "").localeCompare(String(b?.name || ""), "pt-BR", { sensitivity: "base" })
+  );
+}
+
 function getVisibleItems(items, groups, groupAssocs) {
   const itemsInAnyGroup = new Set(groupAssocs.map((assoc) => assoc.item_id));
   const hasGroups = groups.length > 0;
@@ -1337,6 +1341,22 @@ function buildCategoryTree(categories) {
 }
 
 function buildInlineCompositionText(itemId) {
+  const packageGroups = getItemPackageGroups(itemId);
+  if (packageGroups.length) {
+    const seen = new Set();
+    const names = [];
+    const formatQty = value => Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
+    packageGroups.forEach(group => group.members.forEach(member => {
+      const quantity = Math.max(0, Number(member.config.default_quantity || 0));
+      const componentId = String(member.component.id);
+      const name = String(member.component.name || "").trim();
+      if (!name || quantity <= 0 || seen.has(componentId)) return;
+      seen.add(componentId);
+      names.push(quantity > 1 ? `${formatQty(quantity)} x ${name}` : name);
+    }));
+    return names.join(" | ");
+  }
+
   const typeOrder = { delta: 0, scalable: 1 };
 
   const rows = state.associations
@@ -1443,6 +1463,7 @@ function createItemCard(item, mode) {
     ? `<img class="item-photo" src="${photo}" alt="${safeName}" loading="lazy">`
     : "";
 
+  const priceBreakdown = getItemPriceBreakdown(item);
   div.innerHTML = `
     ${photoMarkup}
     <div>
@@ -1450,7 +1471,7 @@ function createItemCard(item, mode) {
       ${isLowStock && badgeText ? `<div class="low-stock-badge">${badgeText}</div>` : ""}
       ${descWithComp ? `<p class="item-desc">${descWithComp}</p>` : ""}
       <div class="item-bottom">
-        <span class="item-price">${currency(item.price)}</span>
+        <span class="item-price">${currency(priceBreakdown.total)}</span>
         ${isInert ? '<span class="item-stock">Indisponível</span>' : ""}
       </div>
     </div>
@@ -1620,7 +1641,7 @@ function renderBranch(category, children, itemsByCategory, sellableByCategory, d
   section.className = depth === 0 ? "menu-section" : `sub-section depth-${depth}`;
   section.dataset.depth = String(depth);
 
-  const ownItems = sortByPriorityThenName(itemsByCategory.get(category.id) || []);
+  const ownItems = sortItemsAlphabetically(itemsByCategory.get(category.id) || []);
   const ownSellableGroups = sellableByCategory.get(String(category.id)) || [];
   const descendants = children[category.id] || [];
   const currentTrail = [...trail, category.name];
@@ -1654,14 +1675,18 @@ function renderBranch(category, children, itemsByCategory, sellableByCategory, d
     ownSellableGroups.forEach(group => {
       group.members.forEach(member => {
         const card=document.createElement("article");
-        card.className="item-card sellable-component-card";
-        card.dataset.search=normalize(`${member.component.name} ${packageCustomerName(group.pack)}`);
-        card.innerHTML=`<div><h4 class="item-name">${escapeHtml(member.component.name)}</h4><p class="item-desc">${escapeHtml(packageCustomerName(group.pack))}</p><div class="item-bottom"><span class="item-price">${currency(member.component.price)}</span><button type="button" class="add-btn">Adicionar</button></div></div>`;
-        card.querySelector("button").addEventListener("click",event=>{event.stopPropagation();adjustSellableGroup(group.pack.id,member.row.composition_id,1);setStatus(`${member.component.name} adicionado.`,`ok`)});
+        const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.pack.id)&&String(row.composition_id)===String(member.component.id));
+        const title=presentation?.display_name||member.component.name,photo=safeImageUrl(presentation?.photo_url_1||"");
+        card.className=`item-card sellable-component-card${photo?"":" no-photo"}`;
+        card.dataset.search=normalize(`${title} ${presentation?.description||""} ${category.name}`);
+        card.innerHTML=`${photo?`<img class="item-photo" src="${photo}" alt="${escapeHtml(title)}" loading="lazy">`:""}<div><h4 class="item-name">${escapeHtml(title)}</h4>${presentation?.description?`<p class="item-desc">${escapeHtml(presentation.description)}</p>`:""}<div class="item-bottom"><span class="item-price">${currency(member.component.price)}</span><button type="button" class="add-btn">Adicionar</button></div></div>`;
+        card.querySelector("button").addEventListener("click",event=>{event.stopPropagation();adjustSellableGroup(group.pack.id,member.row.composition_id,1);setStatus(`${title} adicionado.`,`ok`)});
         grid.appendChild(card);
       });
     });
 
+    const entitlementNotices=ownSellableGroups.map(group=>`<p class="sellable-entitlement" data-sellable-entitlement="${escapeHtml(group.pack.id)}" data-category-name="${escapeHtml(category.name)}"></p>`).join("");
+    if(entitlementNotices)section.insertAdjacentHTML("beforeend",entitlementNotices);
     section.appendChild(grid);
   }
 
@@ -1687,10 +1712,11 @@ function renderMenu(options = {}) {
   const { animateIntro = false } = options;
   const visibleItems = getVisibleItems(state.items, state.groups, state.groupAssociations);
   const { roots, children } = buildCategoryTree(state.categories);
-  const sellableByCategory=new Map();
-  state.ingredientPackages.filter(pack=>pack.is_active!==false&&pack.is_sellable===true&&pack.sellable_category_id).forEach(pack=>{
-    const members=state.packageComponents.filter(row=>String(row.package_id)===String(pack.id)).sort((a,b)=>Number(a.sort_priority||0)-Number(b.sort_priority||0)).map(row=>({row,component:state.compMap[row.composition_id]})).filter(member=>member.component&&member.component.is_active!==false&&(member.component.tracks_stock===false||Number(member.component.stock||0)>0));
-    if(!members.length)return;const key=String(pack.sellable_category_id);if(!sellableByCategory.has(key))sellableByCategory.set(key,[]);sellableByCategory.get(key).push({pack,members});
+  const sellableByCategory=new Map(),sellableTotals=new Map(getSellableGroupTotals().map(group=>[String(group.packageId),group]));
+  state.categories.filter(category=>category.component_package_id).forEach(category=>{
+    const pack=state.ingredientPackages.find(entry=>String(entry.id)===String(category.component_package_id));if(!pack||pack.is_active===false||pack.is_sellable!==true)return;
+    const members=state.packageComponents.filter(row=>String(row.package_id)===String(pack.id)).sort((a,b)=>Number(a.sort_priority||0)-Number(b.sort_priority||0)).map(row=>({row,component:state.compMap[row.composition_id],presentation:state.packagePresentations.find(presentation=>String(presentation.package_id)===String(pack.id)&&String(presentation.composition_id)===String(row.composition_id))})).filter(member=>member.component&&member.component.is_active!==false&&member.presentation?.is_active!==false&&(member.component.tracks_stock===false||Number(member.component.stock||0)>0));
+    if(!members.length)return;const key=String(category.id);if(!sellableByCategory.has(key))sellableByCategory.set(key,[]);sellableByCategory.get(key).push({pack,members,category,totals:sellableTotals.get(String(pack.id))||{allowance:0,freeRemaining:0,components:new Map()}});
   });
 
   const itemsByCategory = new Map();
@@ -1868,6 +1894,52 @@ function getItemPackageGroups(itemId) {
     .filter(group => group && group.members.length);
 }
 
+function getPackageCompositionCharge(group, quantities = {}) {
+  if (!group || group.pack?.is_sellable === true) return 0;
+  const members = group.members || [];
+  const quantityFor = member => Math.max(0, Number(quantities[String(member.row.composition_id)] ?? member.config.default_quantity ?? 0));
+  if (group.pack?.franchise_mode === "shared") {
+    const totalQuantity = members.reduce((sum, member) => sum + quantityFor(member), 0);
+    const allowance = Math.max(0, Number(group.link?.shared_free_allowance || 0));
+    const unitPrice = Math.max(0, Number(members[0]?.component.price || 0));
+    return Math.max(0, totalQuantity - allowance) * unitPrice;
+  }
+  return members.reduce((sum, member) => {
+    const quantity = quantityFor(member);
+    const allowance = group.pack?.franchise_mode === "per_component" ? Math.max(0, Number(member.config.free_allowance || 0)) : 0;
+    return sum + Math.max(0, quantity - allowance) * Math.max(0, Number(member.component.price || 0));
+  }, 0);
+}
+
+function getPackageDefaults(group) {
+  return Object.fromEntries((group?.members || []).map(member => [String(member.row.composition_id), Math.max(0, Number(member.config.default_quantity || 0))]));
+}
+
+function getLegacyCompositionCharge(itemId, selections = null) {
+  return state.associations.filter(association => String(association.owner_id) === String(itemId)).reduce((sum, association) => {
+    const component = state.compMap[association.composition_id];
+    if (!component) return sum;
+    const quantity = Math.max(0, Number(selections?.[association.id] ?? association.link_value ?? 0));
+    return sum + quantity * Math.max(0, Number(component.price || 0));
+  }, 0);
+}
+
+function getItemPriceBreakdown(item, packageState = null, modState = null) {
+  const base = Math.max(0, Number(item?.price || 0));
+  if (!item || item.stock_mode !== "composition") return { base, composition:0, total:base };
+  const groups = getItemPackageGroups(item.id);
+  let composition = 0;
+  if (groups.length) {
+    composition = groups.reduce((sum, group) => {
+      if (group.pack.is_sellable === true) return sum;
+      return sum + getPackageCompositionCharge(group, packageState?.[String(group.pack.id)] || getPackageDefaults(group));
+    }, 0);
+  } else {
+    composition = getLegacyCompositionCharge(item.id, modState);
+  }
+  return { base, composition, total:base + composition };
+}
+
 function packageCustomerName(pack) {
   return String(pack?.customer_name || "").trim() || String(pack?.name || "").trim();
 }
@@ -1943,7 +2015,6 @@ function openPackageItemModal(item, options, groups) {
         selected[packageId][componentId] = value;
         const free = Math.max(0, Number(member.config.free_allowance || 0));
         const paidDelta = Math.max(0, value - free) - Math.max(0, standard - free);
-        extra += paidDelta * Number(member.component.price || 0);
         if (fallback || value === standard) continue;
         const difference = value - standard;
         if (difference > 0) labels.push(`Adicionar ${difference > 1 ? `${difference}x ` : ""}${member.component.name}`);
@@ -1960,6 +2031,9 @@ function openPackageItemModal(item, options, groups) {
         return { valid: false, message: `Escolha no máximo ${group.pack.max_selections} opção(ões) em ${packageCustomerName(group.pack)}.` };
       }
     }
+    const defaultComposition = groups.reduce((sum, group) => sum + getPackageCompositionCharge(group, getPackageDefaults(group)), 0);
+    const selectedComposition = groups.reduce((sum, group) => sum + getPackageCompositionCharge(group, selected[String(group.pack.id)] || getPackageDefaults(group)), 0);
+    extra = selectedComposition - defaultComposition;
     return { valid: true, extra, optionsText: labels.join(" | "), packageState: selected };
   };
 
@@ -1988,7 +2062,8 @@ function openPackageItemModal(item, options, groups) {
     return `<section class="package-customer-group"><h4>${escapeHtml(packageCustomerName(group.pack))}${minSelections > 0 ? `<small class="package-minimum">Mínimo ${minSelections}</small>` : ""}</h4>${warning}${rows}</section>`;
   }).join("");
 
-  ui.modalBody.innerHTML = `<article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item"><div class="modal-scroll">${modalHead}<div class="modal-content"><h3 class="modal-title">${safeName}</h3><p class="modal-price" id="modalDynamicPrice">${currency(item.price)}</p>${description ? `<p class="modal-text">${safeDescription}</p>` : ""}${isUnavailable ? '<p class="item-stock">Item indisponível no momento.</p>' : ""}<div class="comp-wrap"><button class="comp-head" id="compToggleBtn">Modificar</button><div class="comp-body" id="compBody"><div id="compInteractive">${groupsMarkup}</div></div></div><div class="obs-section"><div class="obs-title">Observação do item</div><textarea id="modalNote" class="modal-note" rows="3" placeholder="Observação (opcional)">${escapeHtml(cartEntry?.note || "")}</textarea></div></div></div>${!isUnavailable ? `<div class="modal-footer"><div class="modal-actions"><div class="qty-wrap"><button type="button" class="qty-btn" id="modalQtyMinus">-</button><span class="qty-val" id="modalQtyVal">1</span><button type="button" class="qty-btn" id="modalQtyPlus">+</button></div><button type="button" class="ghost-btn" id="modalViewCartBtn">Ver carrinho</button><button type="button" class="add-btn" id="modalAddBtn">${editIndex !== null ? "Salvar alterações" : "Adicionar ao carrinho"}</button></div></div>` : ""}</article>`;
+  const itemPriceBreakdown = getItemPriceBreakdown(item);
+  ui.modalBody.innerHTML = `<article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item"><div class="modal-scroll">${modalHead}<div class="modal-content"><h3 class="modal-title">${safeName}</h3><p class="modal-price" id="modalDynamicPrice">${currency(itemPriceBreakdown.total)}</p>${description ? `<p class="modal-text">${safeDescription}</p>` : ""}${isUnavailable ? '<p class="item-stock">Item indisponível no momento.</p>' : ""}<div class="comp-wrap"><button class="comp-head" id="compToggleBtn">Modificar</button><div class="comp-body" id="compBody"><div id="compInteractive">${groupsMarkup}</div></div></div><div class="obs-section"><div class="obs-title">Observação do item</div><textarea id="modalNote" class="modal-note" rows="3" placeholder="Observação (opcional)">${escapeHtml(cartEntry?.note || "")}</textarea></div></div></div>${!isUnavailable ? `<div class="modal-footer"><div class="modal-actions"><div class="qty-wrap"><button type="button" class="qty-btn" id="modalQtyMinus">-</button><span class="qty-val" id="modalQtyVal">1</span><button type="button" class="qty-btn" id="modalQtyPlus">+</button></div><button type="button" class="ghost-btn" id="modalViewCartBtn">Ver carrinho</button><button type="button" class="add-btn" id="modalAddBtn">${editIndex !== null ? "Salvar alterações" : "Adicionar ao carrinho"}</button></div></div>` : ""}</article>`;
   ui.modal.classList.add("show");lockPageScroll();
   document.getElementById("modalClose")?.addEventListener("click", closeModal);
   document.getElementById("compToggleBtn")?.addEventListener("click", () => {
@@ -1996,7 +2071,7 @@ function openPackageItemModal(item, options, groups) {
     if(!compBody||!modalScroll)return;const showing=compBody.classList.toggle("show");modalScroll.classList.toggle("mod-scroll-enabled",showing);
   });
   const compInteractive=document.getElementById("compInteractive"),dynamicPrice=document.getElementById("modalDynamicPrice");
-  const refreshPackagePrice=()=>{const selection=getSelection();if(dynamicPrice&&selection.valid)dynamicPrice.textContent=currency(Math.max(0,Number(item.price||0)+selection.extra));};
+  const refreshPackagePrice=()=>{const selection=getSelection();if(dynamicPrice&&selection.valid)dynamicPrice.textContent=currency(Math.max(0,itemPriceBreakdown.total+selection.extra));};
   compInteractive?.addEventListener("change",event=>{
     const input=event.target.closest('[data-package-action="choose"]');if(!input||!input.checked)return;
     const packageId=input.dataset.packageId,componentId=input.dataset.componentId;
@@ -2033,7 +2108,7 @@ function openPackageItemModal(item, options, groups) {
   document.getElementById("modalViewCartBtn")?.addEventListener("click",()=>{closeModal();openCart()});
   document.getElementById("modalAddBtn")?.addEventListener("click",()=>{
     const selection=getSelection();if(!selection.valid){setStatus(selection.message,"err");return}
-    const note=(document.getElementById("modalNote")?.value||"").trim(),unitPrice=Math.max(0,Number(item.price||0)+selection.extra);
+    const note=(document.getElementById("modalNote")?.value||"").trim(),unitPrice=Math.max(0,itemPriceBreakdown.total+selection.extra);
     const signature=buildEntrySignature(item.id,{},note,unitPrice,selection.packageState);
     const payload={signature,name:item.name,price:unitPrice,optionsText:selection.optionsText,note,modState:{},packageState:selection.packageState,qty:state.modalQty};
     if(editIndex!==null){state.cart[editIndex]={...state.cart[editIndex],...payload};renderCart();closeModal();openCart();return}
@@ -2176,13 +2251,14 @@ function openItemModal(item, options = {}) {
         </div>
       `;
 
+  const itemPriceBreakdown = getItemPriceBreakdown(item);
   ui.modalBody.innerHTML = `
     <article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item">
       <div class="modal-scroll">
         ${modalHead}
         <div class="modal-content">
           <h3 class="modal-title">${safeName}</h3>
-          <p class="modal-price" id="modalDynamicPrice">${currency(item.price)}</p>
+          <p class="modal-price" id="modalDynamicPrice">${currency(itemPriceBreakdown.total)}</p>
           ${description ? `<p class="modal-text">${safeDescription}</p>` : ""}
           ${isUnavailable ? '<p class="item-stock">Item indisponível no momento.</p>' : ""}
           ${compSection}
@@ -2288,7 +2364,7 @@ function openItemModal(item, options = {}) {
 
     const current = getCompSelection();
     if (modalDynamicPrice) {
-      modalDynamicPrice.textContent = currency(Number(item.price || 0) + current.extra);
+      modalDynamicPrice.textContent = currency(itemPriceBreakdown.total + current.extra);
     }
   };
 
@@ -2339,7 +2415,7 @@ function openItemModal(item, options = {}) {
   document.getElementById("modalAddBtn")?.addEventListener("click", () => {
     const selection = getCompSelection();
     const note = (document.getElementById("modalNote")?.value || "").trim();
-    const unitPrice = Number(item.price || 0) + selection.extra;
+    const unitPrice = Math.max(0, itemPriceBreakdown.total + selection.extra);
     const signature = buildEntrySignature(item.id, selection.selectedState, note, unitPrice);
 
     if (editIndex !== null) {
@@ -2579,6 +2655,7 @@ function bindRealtime() {
     "item_composition_association",
     "ingredient_package",
     "package_component",
+    "package_component_presentation",
     "item_package",
     "item_component_config",
     "item_group",
@@ -2619,6 +2696,7 @@ async function loadData() {
     associationRes,
     ingredientPackages,
     packageComponents,
+    packagePresentations,
     itemPackages,
     itemComponentConfigs,
     groupsRes,
@@ -2631,6 +2709,7 @@ async function loadData() {
     db.from("item_composition_association").select("*"),
     loadOptionalPackageTable("ingredient_package"),
     loadOptionalPackageTable("package_component"),
+    loadOptionalPackageTable("package_component_presentation"),
     loadOptionalPackageTable("item_package"),
     loadOptionalPackageTable("item_component_config"),
     db.from("item_group").select("*"),
@@ -2652,11 +2731,12 @@ async function loadData() {
 
   state.setup = (setupRes.data || [])[0] || null;
   state.categories = sortByPriorityThenName(categoryRes.data || []);
-  state.items = sortByPriorityThenName(itemsRes.data || []);
+  state.items = sortItemsAlphabetically(itemsRes.data || []);
   state.compositions = compositionRes.data || [];
   state.associations = associationRes.data || [];
   state.ingredientPackages = ingredientPackages;
   state.packageComponents = packageComponents;
+  state.packagePresentations = packagePresentations;
   state.itemPackages = itemPackages;
   state.itemComponentConfigs = itemComponentConfigs;
   state.groups = groupsRes.data || [];
