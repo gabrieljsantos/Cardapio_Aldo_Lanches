@@ -5,6 +5,7 @@ const SUPABASE_KEY = "sb_publishable_IaoUthm5d9UzZCLsQYP2pg_VhsLIl7J";
 const CART_STORAGE_KEY = "smart-store-hub-cart-v1";
 const APP_CHECKOUT_INTENT_KEY = "smart-store-hub-app-checkout-intent";
 const APP_CHECKOUT_SNAPSHOT_KEY = "smart-store-hub-app-checkout-snapshot-v1";
+const CART_GROUP_ADJUSTMENTS_KEY = "smart-store-hub-cart-group-adjustments-v1";
 let checkoutResumeInFlight = false;
 const ORDER_STAGES = [
   { key: "pending_confirmation", label: "Aguardando confirmação" },
@@ -33,6 +34,7 @@ const state = {
   compMap: {},
   searchTerm: "",
   cart: [],
+  cartGroupAdjustments: {},
   modalQty: 1,
   photoRotationTimer: null,
   revealObserver: null,
@@ -286,9 +288,105 @@ function hasCompleteOrderProfile() {
 }
 
 function getCartTotals() {
-  const count = state.cart.reduce((acc, entry) => acc + entry.qty, 0);
-  const total = state.cart.reduce((acc, entry) => acc + entry.qty * Number(entry.price || 0), 0);
+  const count = state.cart.reduce((acc, entry) => acc + entry.qty, 0)
+    + getSellableGroupTotals().reduce((sum, group) => sum + [...group.components.values()].reduce((total, component) => total + component.quantity, 0), 0);
+  const itemTotal = state.cart.reduce((acc, entry) => acc + entry.qty * Number(entry.price || 0), 0);
+  const total = itemTotal + getSellableGroupTotals().reduce((sum, group) => sum + group.totalPrice, 0);
   return { count, total };
+}
+
+function getSellableGroupTotals() {
+  const groups = new Map();
+  for (const pack of state.ingredientPackages.filter(candidate => candidate.is_active !== false && candidate.is_sellable === true && candidate.sellable_category_id)) {
+    groups.set(String(pack.id), { packageId:String(pack.id), pack, components:new Map(), allowance:0, totalPrice:0 });
+    for (const row of state.packageComponents.filter(entry => String(entry.package_id) === String(pack.id))) {
+      const member = { row, component:state.compMap[row.composition_id], config:{ default_quantity:0, free_allowance:0, max_quantity:state.compMap[row.composition_id]?.max_quantity ?? 4, consumption_per_unit:1, is_enabled:true } };
+      if (member.component && member.component.is_active !== false) groups.get(String(pack.id)).components.set(String(row.composition_id), { member, baseline:0, allowance:0, maxQuantity:0, quantity:0, adjustment:0 });
+    }
+  }
+  for (const entry of state.cart) {
+    for (const group of getItemPackageGroups(entry.id).filter(candidate => candidate.pack.is_sellable === true)) {
+      const key = String(group.pack.id);
+      if (!groups.has(key)) groups.set(key, { packageId:key, pack:group.pack, components:new Map(), allowance:0, totalPrice:0 });
+      const aggregate = groups.get(key);
+      const link = group.link || {};
+      if (group.pack.franchise_mode === "shared") aggregate.allowance += Math.max(0, Number(link.shared_free_allowance || 0)) * entry.qty;
+      for (const member of group.members) {
+        const componentId = String(member.row.composition_id);
+        if (!aggregate.components.has(componentId)) aggregate.components.set(componentId, { member, baseline:0, allowance:0, quantity:0, adjustment:0 });
+        const component = aggregate.components.get(componentId);
+        component.member = member;
+        component.baseline += Math.max(0, Number(member.config.default_quantity || 0)) * entry.qty;
+        component.maxQuantity += Math.max(0, Number(member.config.max_quantity ?? member.component.max_quantity ?? 4)) * entry.qty;
+        if (group.pack.franchise_mode === "per_component") component.allowance += Math.max(0, Number(member.config.free_allowance || 0)) * entry.qty;
+      }
+    }
+  }
+  for (const group of groups.values()) {
+    const adjustments = state.cartGroupAdjustments[group.packageId] || {};
+    let totalQuantity = 0;
+    for (const [componentId, component] of group.components) {
+      if (component.maxQuantity === 0) component.maxQuantity = Math.max(0, Number(component.member.component.max_quantity ?? 4));
+      component.adjustment = Math.trunc(Number(adjustments[componentId] || 0));
+      component.quantity = Math.max(0, component.baseline + component.adjustment);
+      if (component.member.component.tracks_stock !== false) component.maxQuantity = Math.min(component.maxQuantity, Math.max(0, Number(component.member.component.stock || 0)));
+      totalQuantity += component.quantity;
+      const price = Math.max(0, Number(component.member.component.price || 0));
+      if (group.pack.franchise_mode !== "shared") {
+        const allowance = group.pack.franchise_mode === "per_component" ? component.allowance : 0;
+        group.totalPrice += Math.max(0, component.quantity - allowance) * price;
+      }
+    }
+    if (group.pack.franchise_mode !== "shared") group.freeRemaining = Math.max(0, [...group.components.values()].reduce((sum, component) => sum + component.allowance, 0) - totalQuantity);
+    if (group.pack.franchise_mode === "shared") {
+      const price = Number(group.components.values().next().value?.member.component.price || 0);
+      group.totalPrice = Math.max(0, totalQuantity - group.allowance) * price;
+      group.freeRemaining = Math.max(0, group.allowance - totalQuantity);
+    }
+  }
+  return [...groups.values()];
+}
+
+function saveCartGroupAdjustments() {
+  try { localStorage.setItem(CART_GROUP_ADJUSTMENTS_KEY, JSON.stringify(state.cartGroupAdjustments)); } catch (_) {}
+}
+
+function adjustSellableGroup(packageId, componentId, delta) {
+  const group = getSellableGroupTotals().find(entry => entry.packageId === String(packageId));
+  const component = group?.components.get(String(componentId));
+  if (!component) return;
+  const next = Math.max(0, Math.min(component.maxQuantity, component.quantity + Number(delta || 0)));
+  state.cartGroupAdjustments[String(packageId)] ||= {};
+  state.cartGroupAdjustments[String(packageId)][String(componentId)] = next - component.baseline;
+  saveCartGroupAdjustments();
+  renderCart();
+}
+
+function buildSellableGroupOrderPayload() {
+  return getSellableGroupTotals().map(group => ({
+    package_id: group.packageId,
+    name: String(group.pack.name || ""),
+    customer_name: packageCustomerName(group.pack),
+    franchise_mode: group.pack.franchise_mode || "none",
+    allowance: Math.max(0, Math.trunc(group.allowance || 0)),
+    components: [...group.components.entries()].map(([compositionId, component]) => ({
+      composition_id: compositionId,
+      quantity: Math.max(0, Math.trunc(component.quantity)),
+      automatic_quantity: Math.max(0, Math.trunc(component.baseline)),
+      manual_adjustment: Math.trunc(component.adjustment),
+      allowance: Math.max(0, Math.trunc(component.allowance || 0))
+    }))
+  }));
+}
+
+function buildOrderPackageState(entry) {
+  const result = { ...(entry.packageState || {}) };
+  for (const group of getItemPackageGroups(entry.id).filter(candidate => candidate.pack.is_sellable === true)) {
+    const values = {};
+    group.members.forEach(member => { values[String(member.row.composition_id)] = Math.max(0, Number(member.config.default_quantity || 0)); });
+    result[String(group.pack.id)] = values;
+  }
+  return result;
 }
 
 function getCurrentAvailabilityMap() {
@@ -322,6 +420,8 @@ function persistCart() {
 
 function restoreCart() {
   try {
+    const pooled = JSON.parse(localStorage.getItem(CART_GROUP_ADJUSTMENTS_KEY) || "{}");
+    state.cartGroupAdjustments = pooled && typeof pooled === "object" ? pooled : {};
     const raw = localStorage.getItem(CART_STORAGE_KEY);
     if (!raw) {
       return;
@@ -374,7 +474,9 @@ function restorePhotoState(savedMap) {
 function renderCart() {
   const { count, total } = getCartTotals();
   const availabilityMap = getCurrentAvailabilityMap();
-  const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap));
+  const sellableGroups=getSellableGroupTotals();
+  const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap))
+    || sellableGroups.some(group=>[...group.components.values()].some(component=>component.quantity>component.maxQuantity));
 
   ui.cartTotal.textContent = currency(total);
   ui.cartFabCount.textContent = `${count} ${count === 1 ? "item" : "itens"}`;
@@ -396,7 +498,7 @@ function renderCart() {
 
   ui.cartFab.classList.add("show");
   ui.checkoutBtn.textContent = hasUnavailable ? "Remova itens indisponíveis" : "Finalizar no WhatsApp";
-  ui.cartList.innerHTML = state.cart
+  const itemMarkup = state.cart
     .map((entry, index) => `
       <article class="cart-item${isCartEntryUnavailable(entry, availabilityMap) ? " unavailable" : ""}">
         <div class="cart-item-top">
@@ -420,6 +522,17 @@ function renderCart() {
       </article>
     `)
     .join("");
+  const pooledMarkup = sellableGroups.map(group => {
+    const components = [...group.components.entries()].map(([componentId, component]) => `
+      <div class="cart-item-bottom">
+        <strong>${escapeHtml(component.member.component.name)}</strong>
+        <div class="qty-wrap"><button type="button" class="qty-btn" data-pool-step="-1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" ${component.quantity<=0?"disabled":""}>−</button><span class="qty-val">${component.quantity}</span><button type="button" class="qty-btn" data-pool-step="1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" ${component.quantity>=component.maxQuantity?"disabled":""}>+</button></div>
+      </div>`).join("");
+    const allowance = group.pack.franchise_mode === "shared" ? `<p class="item-desc">Você ainda tem direito a ${group.freeRemaining} ${escapeHtml(packageCustomerName(group.pack))}.</p>` : "";
+    const stockWarning=[...group.components.values()].some(component=>component.quantity>component.maxQuantity)?'<p class="cart-item-warning">A quantidade supera o estoque disponível.</p>':"";
+    return `<section class="cart-item cart-sellable-group"><h4>${escapeHtml(packageCustomerName(group.pack))}</h4>${allowance}${stockWarning}${components}<strong>${currency(group.totalPrice)}</strong></section>`;
+  }).join("");
+  ui.cartList.innerHTML = itemMarkup + pooledMarkup;
 
   persistCart();
 }
@@ -500,13 +613,14 @@ function closeCart() {
 }
 
 function openCheckoutConfirmation() {
-  if (!state.cart.length) return;
+  if (getCartTotals().count === 0) return;
   savePendingCheckoutSnapshot();
   ui.checkoutDeliveryInfo.innerHTML = [
     `<strong>${escapeHtml(state.profile?.known_as || "")}</strong>`,
     escapeHtml(state.profile?.phone || ""),
     escapeHtml([state.profile?.street, state.profile?.landmark, state.profile?.address_extra].filter(Boolean).join(" · "))
   ].filter(Boolean).join("<br>");
+  const pooledConfirm=getSellableGroupTotals().map(group=>`<article class="order-confirm-item"><div><strong>${escapeHtml(packageCustomerName(group.pack))}</strong><small>${[...group.components.values()].filter(component=>component.quantity>0).map(component=>`${component.quantity}× ${escapeHtml(component.member.component.name)}`).join(" · ")}</small>${group.pack.franchise_mode==="shared"?`<small>Você ainda tem direito a ${group.freeRemaining} ${escapeHtml(packageCustomerName(group.pack))}.</small>`:""}</div><span>${currency(group.totalPrice)}</span></article>`).join("");
   ui.checkoutConfirmItems.innerHTML = state.cart.map((entry) => `
     <article class="order-confirm-item">
       <div><strong>${Number(entry.qty)}× ${escapeHtml(entry.name)}</strong>
@@ -514,7 +628,7 @@ function openCheckoutConfirmation() {
         ${entry.note ? `<small>${escapeHtml(entry.note)}</small>` : ""}
       </div><span>${currency(Number(entry.price || 0) * Number(entry.qty || 0))}</span>
     </article>
-  `).join("") + (String(ui.cartNote.value || "").trim()
+  `).join("") + pooledConfirm + (String(ui.cartNote.value || "").trim()
     ? `<p class="customer-order-notes">${escapeHtml(String(ui.cartNote.value).trim())}</p>`
     : "");
   ui.checkoutConfirmTotal.textContent = currency(getCartTotals().total);
@@ -574,8 +688,9 @@ function syncCartWithCurrentCatalog() {
         const packageId = String(group.pack.id), saved = entry.packageState?.[packageId] || {};
         for (const member of group.members) {
           const componentId = String(member.row.composition_id);
-          const standard = Math.max(0, Number(member.config.default_quantity || 0));
-          const selected = Math.max(0, Number(saved[componentId] ?? standard));
+          const limit = Math.min(packageQuantityLimit(group.pack), Number(member.config.max_quantity ?? member.component.max_quantity ?? 4));
+          const standard = Math.min(limit, Math.max(0, Number(member.config.default_quantity || 0)));
+          const selected = Math.min(limit, Math.max(0, Number(saved[componentId] ?? standard)));
           const free = Math.max(0, Number(member.config.free_allowance || 0));
           const delta = Math.max(0, selected - free) - Math.max(0, standard - free);
           unitPrice += delta * Number(member.component.price || 0);
@@ -596,6 +711,7 @@ function syncCartWithCurrentCatalog() {
     entry.name = item.name;
     entry.price = Math.max(0, unitPrice);
   });
+
   renderCart();
 }
 
@@ -608,7 +724,7 @@ async function submitAppOrder() {
       return;
     }
   }
-  if (!state.user || !hasCompleteOrderProfile() || !state.cart.length) {
+  if (!state.user || !hasCompleteOrderProfile() || getCartTotals().count === 0) {
     if (state.user && !hasCompleteOrderProfile()) openAccountDialog();
     return;
   }
@@ -621,15 +737,18 @@ async function submitAppOrder() {
       notes: String(entry.note || ""),
       options_text: String(entry.optionsText || ""),
       mod_state: entry.modState && typeof entry.modState === "object" ? entry.modState : {},
-      package_state: entry.packageState && typeof entry.packageState === "object" ? entry.packageState : {}
+      package_state: buildOrderPackageState(entry)
     }));
-    const { data: orderId, error } = await db.rpc("submit_app_order", {
+    const { data: orderId, error } = await db.rpc("submit_app_order_with_groups", {
       p_items: payload,
       p_notes: String(ui.cartNote.value || "").trim() || null,
-      p_payment_method: ui.orderPaymentMethod.value
+      p_payment_method: ui.orderPaymentMethod.value,
+      p_group_totals: buildSellableGroupOrderPayload()
     });
     if (error) throw error;
     state.cart = [];
+    state.cartGroupAdjustments = {};
+    saveCartGroupAdjustments();
     ui.cartNote.value = "";
     sessionStorage.removeItem(APP_CHECKOUT_INTENT_KEY);
     sessionStorage.removeItem(APP_CHECKOUT_SNAPSHOT_KEY);
@@ -670,10 +789,15 @@ async function openCustomerOrders(selectedId = null) {
 
 async function loadCustomerOrders(selectedId = null) {
   if (!state.user) return;
-  const { data, error } = await db.from("orders")
+  let response = await db.from("orders")
+    .select("id, status, created_at, customer_known_as, phone, delivery_address, notes, payment_method, subtotal, total, order_items(id, item_name, unit_price, quantity, notes, snapshot, order_item_components(id, component_name, quantity, free_quantity, charged_quantity, unit_price)), order_sellable_component_totals(id, group_name, customer_name, component_name, quantity, automatic_quantity, manual_adjustment, charged_quantity, unit_price, snapshot), order_status_history(id, from_status, to_status, created_at)")
+    .eq("customer_id", state.user.id)
+    .order("created_at", { ascending: false });
+  if (response.error && /order_sellable_component_totals|relationship|schema cache/i.test(response.error.message || "")) response = await db.from("orders")
     .select("id, status, created_at, customer_known_as, phone, delivery_address, notes, payment_method, subtotal, total, order_items(id, item_name, unit_price, quantity, notes, snapshot, order_item_components(id, component_name, quantity, free_quantity, charged_quantity, unit_price)), order_status_history(id, from_status, to_status, created_at)")
     .eq("customer_id", state.user.id)
     .order("created_at", { ascending: false });
+  const { data, error } = response;
   if (error) {
     console.error("Falha ao carregar pedidos:", error);
     ui.customerOrderList.innerHTML = '<p>Não foi possível carregar seus pedidos.</p>';
@@ -696,7 +820,7 @@ function renderCustomerOrders() {
     const status = order.status === "cancelled"
       ? "Pedido cancelado"
       : (ORDER_STAGES.find((stage) => stage.key === order.status)?.label || "Pedido");
-    const itemNames = (order.order_items || []).map((item) => `${Number(item.quantity)}× ${escapeHtml(item.item_name)}`).join(" · ");
+    const itemNames = [...(order.order_items || []).map((item) => `${Number(item.quantity)}× ${escapeHtml(item.item_name)}`), ...(order.order_sellable_component_totals||[]).filter(row=>Number(row.quantity)>0).map(row=>`${Number(row.quantity)}× ${escapeHtml(row.component_name)}`)].join(" · ");
     return `<article class="customer-order-card">
       <div><strong>${new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong>
         <span class="customer-order-status">${escapeHtml(status)}</span><small>${itemNames}</small>
@@ -724,8 +848,9 @@ function showCustomerOrderDetail(order) {
       .map((component) => `${escapeHtml(component.component_name)}${Number(component.quantity) > 1 ? ` ×${Number(component.quantity)}` : ""}`).join(" · ");
     return `<article class="customer-order-line"><div><strong>${Number(item.quantity)}× ${escapeHtml(item.item_name)}</strong>${components ? `<small>${components}</small>` : ""}${item.notes ? `<small>${escapeHtml(item.notes)}</small>` : ""}</div><span>${currency(Number(item.unit_price) * Number(item.quantity))}</span></article>`;
   }).join("");
+  const pooled = (order.order_sellable_component_totals || []).filter(component => Number(component.quantity) > 0).map(component => `<article class="customer-order-line"><div><strong>${escapeHtml(component.customer_name || component.group_name)} · ${escapeHtml(component.component_name)}</strong><small>${Number(component.quantity)}×${Number(component.manual_adjustment) ? ` · ajuste manual ${Number(component.manual_adjustment) > 0 ? "+" : ""}${Number(component.manual_adjustment)}` : ""}</small></div><span>${currency(Number(component.charged_quantity || 0) * Number(component.unit_price || 0))}</span></article>`).join("");
   ui.customerOrderDetail.innerHTML = `<div class="order-tracking-head"><strong>${escapeHtml(order.customer_known_as || state.profile?.known_as || "Pedido")}</strong><span>${new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></div>
-    <ol class="order-timeline">${timeline}</ol><div class="customer-order-lines">${items}</div>
+    <ol class="order-timeline">${timeline}</ol><div class="customer-order-lines">${items}${pooled}</div>
     ${order.notes ? `<p class="customer-order-notes">${escapeHtml(order.notes)}</p>` : ""}
     <div class="order-confirm-total"><span>${order.payment_method === "at_delivery" ? "Pessoalmente na entrega" : "Pix"}</span><strong>${currency(order.total)}</strong></div>`;
   ui.customerOrderList.hidden = true;
@@ -808,7 +933,8 @@ function buildOrderMessage() {
   }
 
   const availabilityMap = getCurrentAvailabilityMap();
-  const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap));
+  const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap))
+    || getSellableGroupTotals().some(group=>[...group.components.values()].some(component=>component.quantity>component.maxQuantity));
   if (hasUnavailable) {
     return null;
   }
@@ -834,6 +960,16 @@ function buildOrderMessage() {
       lines.push(`  obs.: ${entry.note}`);
     }
 
+    lines.push("");
+  });
+
+  getSellableGroupTotals().forEach(group => {
+    lines.push(`• ${packageCustomerName(group.pack)}:`);
+    for (const component of group.components.values()) {
+      if (component.quantity > 0) lines.push(`  ${component.quantity}x ${component.member.component.name}`);
+    }
+    if (group.pack.franchise_mode === "shared") lines.push(`  Você ainda tem direito a ${group.freeRemaining} ${packageCustomerName(group.pack)}.`);
+    if (group.totalPrice > 0) lines.push(`  Adicionais: ${currency(group.totalPrice)}`);
     lines.push("");
   });
 
@@ -878,7 +1014,8 @@ async function checkoutWhatsApp() {
       return;
     }
     const availabilityMap = getCurrentAvailabilityMap();
-    const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap));
+    const hasUnavailable = state.cart.some((entry) => isCartEntryUnavailable(entry, availabilityMap))
+      || getSellableGroupTotals().some(group=>[...group.components.values()].some(component=>component.quantity>component.maxQuantity));
     if (hasUnavailable) {
       alert("Existem itens indisponíveis no carrinho. Remova-os para finalizar o pedido.");
     }
@@ -1039,8 +1176,9 @@ function getCompositionStock(item) {
 
   const capacities = [];
   linkedPackages.forEach(({ link, pack }) => {
+    if (pack.is_sellable === true) return;
     const rule = pack.availability_rule || "optional_warn_only";
-    if (rule !== "all_positive_defaults_required" && rule !== "one_available_with_priority_fallback") return;
+    if (rule !== "all_positive_defaults_required" && rule !== "one_available_with_priority_fallback" && pack.kind !== "decay") return;
 
     const members = state.packageComponents
       .filter((row) => String(row.package_id) === String(pack.id))
@@ -1075,7 +1213,7 @@ function getCompositionStock(item) {
 
     // Fallback: um componente do grupo basta. O estoque disponível nas
     // alternativas, na prioridade definida pelo administrador, é somado.
-    if (rule === "one_available_with_priority_fallback") {
+    if (rule === "one_available_with_priority_fallback" || pack.kind === "decay") {
       const alternatives = members.map((member) => componentCapacity(member, true)).filter((value) => value > 0);
       capacities.push(alternatives.length ? alternatives.reduce((sum, value) => sum + value, 0) : 0);
     }
@@ -1477,12 +1615,13 @@ function scheduleVisibleReactLoop() {
   state.visibleReactTimer = setTimeout(run, nextVisibleReactDelayMs());
 }
 
-function renderBranch(category, children, itemsByCategory, depth = 0, trail = []) {
+function renderBranch(category, children, itemsByCategory, sellableByCategory, depth = 0, trail = []) {
   const section = document.createElement("section");
   section.className = depth === 0 ? "menu-section" : `sub-section depth-${depth}`;
   section.dataset.depth = String(depth);
 
   const ownItems = sortByPriorityThenName(itemsByCategory.get(category.id) || []);
+  const ownSellableGroups = sellableByCategory.get(String(category.id)) || [];
   const descendants = children[category.id] || [];
   const currentTrail = [...trail, category.name];
   const showPath = depth > 0 && (ownItems.length > 0 || descendants.length === 0);
@@ -1504,7 +1643,7 @@ function renderBranch(category, children, itemsByCategory, depth = 0, trail = []
     section.appendChild(title);
   }
 
-  if (ownItems.length > 0) {
+  if (ownItems.length > 0 || ownSellableGroups.length > 0) {
     const mode = (category.display_mode === "grade" || category.display_mode === "grid") ? "grade" : "lista";
     const grid = document.createElement("div");
     grid.className = mode === "grade" ? "items-grid" : "items-list";
@@ -1512,18 +1651,28 @@ function renderBranch(category, children, itemsByCategory, depth = 0, trail = []
     ownItems.forEach((item) => {
       grid.appendChild(createItemCard(item, mode));
     });
+    ownSellableGroups.forEach(group => {
+      group.members.forEach(member => {
+        const card=document.createElement("article");
+        card.className="item-card sellable-component-card";
+        card.dataset.search=normalize(`${member.component.name} ${packageCustomerName(group.pack)}`);
+        card.innerHTML=`<div><h4 class="item-name">${escapeHtml(member.component.name)}</h4><p class="item-desc">${escapeHtml(packageCustomerName(group.pack))}</p><div class="item-bottom"><span class="item-price">${currency(member.component.price)}</span><button type="button" class="add-btn">Adicionar</button></div></div>`;
+        card.querySelector("button").addEventListener("click",event=>{event.stopPropagation();adjustSellableGroup(group.pack.id,member.row.composition_id,1);setStatus(`${member.component.name} adicionado.`,`ok`)});
+        grid.appendChild(card);
+      });
+    });
 
     section.appendChild(grid);
   }
 
   descendants.forEach((child) => {
-    const childNode = renderBranch(child, children, itemsByCategory, depth + 1, currentTrail);
+    const childNode = renderBranch(child, children, itemsByCategory, sellableByCategory, depth + 1, currentTrail);
     if (childNode) {
       section.appendChild(childNode);
     }
   });
 
-  if (ownItems.length === 0 && descendants.length === 0) {
+  if (ownItems.length === 0 && ownSellableGroups.length === 0 && descendants.length === 0) {
     return null;
   }
 
@@ -1538,6 +1687,11 @@ function renderMenu(options = {}) {
   const { animateIntro = false } = options;
   const visibleItems = getVisibleItems(state.items, state.groups, state.groupAssociations);
   const { roots, children } = buildCategoryTree(state.categories);
+  const sellableByCategory=new Map();
+  state.ingredientPackages.filter(pack=>pack.is_active!==false&&pack.is_sellable===true&&pack.sellable_category_id).forEach(pack=>{
+    const members=state.packageComponents.filter(row=>String(row.package_id)===String(pack.id)).sort((a,b)=>Number(a.sort_priority||0)-Number(b.sort_priority||0)).map(row=>({row,component:state.compMap[row.composition_id]})).filter(member=>member.component&&member.component.is_active!==false&&(member.component.tracks_stock===false||Number(member.component.stock||0)>0));
+    if(!members.length)return;const key=String(pack.sellable_category_id);if(!sellableByCategory.has(key))sellableByCategory.set(key,[]);sellableByCategory.get(key).push({pack,members});
+  });
 
   const itemsByCategory = new Map();
   visibleItems.forEach((item) => {
@@ -1554,7 +1708,7 @@ function renderMenu(options = {}) {
   ui.menu.innerHTML = "";
 
   roots.forEach((root) => {
-    const rootNode = renderBranch(root, children, itemsByCategory, 0);
+    const rootNode = renderBranch(root, children, itemsByCategory, sellableByCategory, 0);
     if (!rootNode) return;
     rootNode.id = `cat-${root.id}`;
     ui.menu.appendChild(rootNode);
@@ -1714,6 +1868,16 @@ function getItemPackageGroups(itemId) {
     .filter(group => group && group.members.length);
 }
 
+function packageCustomerName(pack) {
+  return String(pack?.customer_name || "").trim() || String(pack?.name || "").trim();
+}
+
+function packageQuantityLimit(pack) {
+  if (pack?.kind === "adjustable") return 2;
+  if (pack?.kind === "complementary" || pack?.kind === "single_required") return 1;
+  return Number.POSITIVE_INFINITY;
+}
+
 function packageMemberAvailable(member, quantity = 1) {
   if (!member.component || member.component.is_active === false) return false;
   if (member.component.tracks_stock === false) return true;
@@ -1722,6 +1886,7 @@ function packageMemberAvailable(member, quantity = 1) {
 }
 
 function openPackageItemModal(item, options, groups) {
+  groups = groups.filter(group => group.pack.is_sellable !== true);
   const editIndex = Number.isInteger(options.editIndex) ? options.editIndex : null;
   const cartEntry = editIndex !== null ? state.cart[editIndex] : null;
   state.modalQty = cartEntry?.qty || 1;
@@ -1730,7 +1895,8 @@ function openPackageItemModal(item, options, groups) {
   const hasMainPhoto = Boolean(mainPhoto), safeName = escapeHtml(item.name);
   const description = String(item.description || "").trim(), safeDescription = escapeHtml(description);
   const packageState = {};
-  const fallbackGroup = group => group.pack.availability_rule === "one_available_with_priority_fallback" || group.pack.kind === "single_required";
+  const fallbackGroup = group => group.pack.kind === "decay" || group.pack.availability_rule === "one_available_with_priority_fallback" || group.pack.kind === "single_required";
+  const automaticDecayChoices = {};
 
   for (const group of groups) {
     const packageId = String(group.pack.id), stored = cartEntry?.packageState?.[packageId] || {};
@@ -1738,14 +1904,16 @@ function openPackageItemModal(item, options, groups) {
     if (fallbackGroup(group)) {
       const saved = group.members.find(member => Number(stored[member.row.composition_id]) > 0 && packageMemberAvailable(member));
       const standard = group.members.find(member => Number(member.config.default_quantity) > 0 && packageMemberAvailable(member));
-      const choice = saved || standard || null;
+      const choice = saved || standard || group.members.find(member => packageMemberAvailable(member)) || null;
+      if (!saved && choice && choice !== standard) automaticDecayChoices[packageId] = choice;
       group.members.forEach(member => { packageState[packageId][member.row.composition_id] = member === choice ? 1 : 0; });
       continue;
     }
     group.members.forEach(member => {
       const key = String(member.row.composition_id), standard = Math.max(0, Number(member.config.default_quantity || 0));
       const saved = Object.prototype.hasOwnProperty.call(stored, key) ? Number(stored[key]) : standard;
-      packageState[packageId][key] = packageMemberAvailable(member, Math.max(saved, standard)) ? saved : 0;
+      const limit = Math.min(packageQuantityLimit(group.pack), Number(member.config.max_quantity ?? member.component.max_quantity ?? 4));
+      packageState[packageId][key] = packageMemberAvailable(member, Math.max(saved, standard)) ? Math.min(limit, Math.max(0, saved)) : 0;
     });
   }
 
@@ -1759,13 +1927,17 @@ function openPackageItemModal(item, options, groups) {
       const chosen = fallback ? group.members.find(member => Number(values[member.row.composition_id]) > 0) : null;
       const defaultMember = fallback ? group.members.find(member => Number(member.config.default_quantity) > 0) : null;
       if (fallback && chosen && defaultMember && chosen !== defaultMember) {
-        labels.push(`Substituir ${defaultMember.component.name} por ${chosen.component.name}`);
+        const automatic = automaticDecayChoices[packageId] === chosen || (defaultMember && !packageMemberAvailable(defaultMember) && chosen !== defaultMember);
+        const priority = Math.max(1, Number(chosen.row.sort_priority || 0) + 1);
+        labels.push(automatic
+          ? `Decaimento automático: ${defaultMember.component.name} indisponível; selecionado ${chosen.component.name} (prioridade ${priority})`
+          : `Substituir ${defaultMember.component.name} por ${chosen.component.name}`);
       }
-      if (fallback && !chosen) return { valid: false, message: `Escolha uma opção disponível em ${group.pack.name}.` };
+      if (fallback && !chosen) return { valid: false, message: `Escolha uma opção disponível em ${packageCustomerName(group.pack)}.` };
       for (const member of group.members) {
         const componentId = String(member.row.composition_id);
         const standard = Math.max(0, Number(member.config.default_quantity || 0));
-        const max = Math.max(0, Number(member.config.max_quantity ?? member.component.max_quantity ?? 4));
+        const max = Math.max(0, Math.min(packageQuantityLimit(group.pack), Number(member.config.max_quantity ?? member.component.max_quantity ?? 4)));
         const value = fallback ? (member === chosen ? 1 : 0) : Math.min(max, Math.max(0, Number(values[componentId] || 0)));
         values[componentId] = value;
         selected[packageId][componentId] = value;
@@ -1779,13 +1951,13 @@ function openPackageItemModal(item, options, groups) {
       }
       const selectedCount = Object.values(selected[packageId]).filter(value => Number(value) > 0).length;
       if (fallback && selectedCount !== 1) {
-        return { valid: false, message: `Escolha exatamente uma opção em ${group.pack.name}.` };
+        return { valid: false, message: `Escolha exatamente uma opção em ${packageCustomerName(group.pack)}.` };
       }
       if (group.pack.min_selections != null && selectedCount < Number(group.pack.min_selections)) {
-        return { valid: false, message: `Escolha pelo menos ${group.pack.min_selections} opção(ões) em ${group.pack.name}.` };
+        return { valid: false, message: `Escolha pelo menos ${group.pack.min_selections} opção(ões) em ${packageCustomerName(group.pack)}.` };
       }
       if (group.pack.max_selections != null && selectedCount > Number(group.pack.max_selections)) {
-        return { valid: false, message: `Escolha no máximo ${group.pack.max_selections} opção(ões) em ${group.pack.name}.` };
+        return { valid: false, message: `Escolha no máximo ${group.pack.max_selections} opção(ões) em ${packageCustomerName(group.pack)}.` };
       }
     }
     return { valid: true, extra, optionsText: labels.join(" | "), packageState: selected };
@@ -1796,21 +1968,24 @@ function openPackageItemModal(item, options, groups) {
     : `<div class="modal-head no-photo"><button class="modal-close" id="modalClose" aria-label="Fechar">X</button></div>`;
   const groupsMarkup = groups.map(group => {
     const packageId = String(group.pack.id), fallback = fallbackGroup(group);
+    const minSelections = Math.max(0, Number(group.pack.min_selections || 0));
+    const selectedCount = Object.values(packageState[packageId] || {}).filter(value => Number(value) > 0).length;
     const warning = group.pack.availability_rule === "optional_warn_only" && group.members.some(member => !packageMemberAvailable(member))
       ? `<small class="package-stock-warning">Algumas opções estão indisponíveis.</small>` : "";
     const rows = group.members.map(member => {
       const compositionId = String(member.row.composition_id), available = packageMemberAvailable(member);
       const value = Number(packageState[packageId][compositionId] || 0),
         standard = Number(member.config.default_quantity || 0),
-        max = Math.min(Number(member.config.max_quantity ?? member.component.max_quantity ?? 4), Number(member.component.max_quantity ?? 4), member.component.tracks_stock === false ? Number.POSITIVE_INFINITY : Math.floor(Number(member.component.stock || 0) / Math.max(1, Number(member.config.consumption_per_unit || 1))));
+        max = Math.min(packageQuantityLimit(group.pack), Number(member.config.max_quantity ?? member.component.max_quantity ?? 4), Number(member.component.max_quantity ?? 4), member.component.tracks_stock === false ? Number.POSITIVE_INFINITY : Math.floor(Number(member.component.stock || 0) / Math.max(1, Number(member.config.consumption_per_unit || 1))));
       const price = Number(member.component.price || 0) > 0 ? `<small>${currency(member.component.price)}</small>` : "";
       if (fallback) {
         const checked = value === 1;
         return `<label class="package-choice ${available ? "" : "is-unavailable"}"><input type="radio" name="package-${escapeHtml(packageId)}" data-package-action="choose" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${checked ? "checked" : ""} ${available ? "" : "disabled"}><span><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? "<small>Indisponível</small>" : ""}</span></label>`;
       }
-      return `<div class="comp-row package-component-choice ${available ? "" : "is-unavailable"}"><div><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? `<small>${group.pack.availability_rule === "optional_warn_only" ? "Indisponível" : "Sem estoque"}</small>` : ""}</div><div class="comp-actions"><div class="qty-wrap"><button type="button" class="qty-btn" data-package-action="step" data-step="-1" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}">−</button><span class="qty-val">${value}</span><button type="button" class="qty-btn" data-package-action="step" data-step="1" data-max="${max}" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${!available ? "disabled" : ""}>+</button></div></div></div>`;
+      const cannotRemoveLast = value <= 1 && selectedCount <= minSelections;
+      return `<div class="comp-row package-component-choice ${available ? "" : "is-unavailable"}"><div><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? `<small>${group.pack.availability_rule === "optional_warn_only" ? "Indisponível" : "Sem estoque"}</small>` : ""}</div><div class="comp-actions"><div class="qty-wrap"><button type="button" class="qty-btn" data-package-action="step" data-step="-1" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${value <= 0 || cannotRemoveLast ? "disabled" : ""}>−</button><span class="qty-val">${value}</span><button type="button" class="qty-btn" data-package-action="step" data-step="1" data-max="${max}" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${!available ? "disabled" : ""}>+</button></div></div></div>`;
     }).join("");
-    return `<section class="package-customer-group"><h4>${escapeHtml(group.pack.name)}</h4>${warning}${rows}</section>`;
+    return `<section class="package-customer-group"><h4>${escapeHtml(packageCustomerName(group.pack))}${minSelections > 0 ? `<small class="package-minimum">Mínimo ${minSelections}</small>` : ""}</h4>${warning}${rows}</section>`;
   }).join("");
 
   ui.modalBody.innerHTML = `<article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item"><div class="modal-scroll">${modalHead}<div class="modal-content"><h3 class="modal-title">${safeName}</h3><p class="modal-price" id="modalDynamicPrice">${currency(item.price)}</p>${description ? `<p class="modal-text">${safeDescription}</p>` : ""}${isUnavailable ? '<p class="item-stock">Item indisponível no momento.</p>' : ""}<div class="comp-wrap"><button class="comp-head" id="compToggleBtn">Modificar</button><div class="comp-body" id="compBody"><div id="compInteractive">${groupsMarkup}</div></div></div><div class="obs-section"><div class="obs-title">Observação do item</div><textarea id="modalNote" class="modal-note" rows="3" placeholder="Observação (opcional)">${escapeHtml(cartEntry?.note || "")}</textarea></div></div></div>${!isUnavailable ? `<div class="modal-footer"><div class="modal-actions"><div class="qty-wrap"><button type="button" class="qty-btn" id="modalQtyMinus">-</button><span class="qty-val" id="modalQtyVal">1</span><button type="button" class="qty-btn" id="modalQtyPlus">+</button></div><button type="button" class="ghost-btn" id="modalViewCartBtn">Ver carrinho</button><button type="button" class="add-btn" id="modalAddBtn">${editIndex !== null ? "Salvar alterações" : "Adicionar ao carrinho"}</button></div></div>` : ""}</article>`;
@@ -1835,11 +2010,21 @@ function openPackageItemModal(item, options, groups) {
     const perUnit=Math.max(1,Number(member?.config.consumption_per_unit||1));
     const stockLimit=member?.component.tracks_stock===false?Number.POSITIVE_INFINITY:Math.floor(Math.max(0,Number(member?.component.stock||0))/(perUnit*Math.max(1,Number(state.modalQty||1))));
     const max=Math.max(0,Math.min(Number(button.dataset.max??4),stockLimit));
-    packageState[packageId][componentId]=Math.min(max,Math.max(0,Number(packageState[packageId][componentId]||0)+Number(button.dataset.step||0)));
+    const currentValue=Number(packageState[packageId][componentId]||0),nextValue=Math.min(max,Math.max(0,currentValue+Number(button.dataset.step||0)));
+    const selectedBefore=Object.values(packageState[packageId]||{}).filter(value=>Number(value)>0).length;
+    const minSelections=Math.max(0,Number(group?.pack.min_selections||0));
+    const selectedAfter=selectedBefore-(currentValue>0&&nextValue===0?1:0)+(currentValue===0&&nextValue>0?1:0);
+    if(selectedAfter<minSelections){setStatus(`Mantenha pelo menos ${minSelections} opção(ões) em ${packageCustomerName(group.pack)}.`,"err");return}
+    packageState[packageId][componentId]=nextValue;
     const value=packageState[packageId][componentId],controls=button.parentElement;
     controls.querySelector(".qty-val").textContent=String(value);
-    controls.querySelector('[data-step="-1"]').disabled=value<=0;
     controls.querySelector('[data-step="1"]').disabled=value>=max;
+    const selectedNow=Object.values(packageState[packageId]||{}).filter(quantity=>Number(quantity)>0).length;
+    for(const decrement of compInteractive.querySelectorAll('[data-package-action="step"][data-step="-1"]')){
+      if(decrement.dataset.packageId!==packageId)continue;
+      const quantity=Number(packageState[packageId][decrement.dataset.componentId]||0);
+      decrement.disabled=quantity<=0||(quantity<=1&&selectedNow<=minSelections);
+    }
     refreshPackagePrice();
   });
   const qtyVal=document.getElementById("modalQtyVal");
@@ -2274,6 +2459,8 @@ function bindEvents() {
   });
 
   ui.cartList.addEventListener("click", (event) => {
+    const poolStep=event.target.closest("[data-pool-step]");
+    if(poolStep){adjustSellableGroup(poolStep.dataset.packageId,poolStep.dataset.componentId,Number(poolStep.dataset.poolStep));return}
     const editIndex = event.target.getAttribute("data-cart-edit");
     if (editIndex !== null) {
       openCartEdit(Number(editIndex));

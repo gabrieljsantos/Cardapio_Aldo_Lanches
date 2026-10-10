@@ -1,0 +1,74 @@
+{
+  ".vscode/settings.json": {
+    "mtime": 1776532107.0896955,
+    "seen": 1791120183.9912977,
+    "ast_hash": "19751b2a32e46d1ba1477f357123a898",
+    "semantic_hash": "19751b2a32e46d1ba1477f357123a898"
+  },
+  "assets/js/index.js": {
+    "mtime": 1791638661.8432915,
+    "seen": 1791638689.3128896,
+    "ast_hash": "11d64b936a68afcacb208b8c04676cd5",
+    "semantic_hash": ""
+  },
+  "backup_esquema_2026-04-04/index.js": {
+    "mtime": 1775301438.5451193,
+    "seen": 1791120183.9913256,
+    "ast_hash": "a184c4e3071b99517fcffb173e9a7a0b",
+    "semantic_hash": "a184c4e3071b99517fcffb173e9a7a0b"
+  },
+  "backup_esquema_2026-04-04/index.html": {
+    "mtime": 1775301254.5591779,
+    "seen": 1791569803.5843573,
+    "ast_hash": "bf6a96c65a46c4c5da58c56c033ff72a",
+    "semantic_hash": ""
+  },
+  "index.html": {
+    "mtime": 1791635311.1437502,
+    "seen": 1791635321.643426,
+    "ast_hash": "ebead95b8616f99b0cef31f170ad8fff",
+    "semantic_hash": ""
+  },
+  "manage_inventory copy.html": {
+    "mtime": 1777141064.1695006,
+    "seen": 1791569803.5843596,
+    "ast_hash": "ab462633c586bc12595ab1a6a71b6e5f",
+    "semantic_hash": ""
+  },
+  "manage_inventory.html": {
+    "mtime": 1784487986.8099802,
+    "seen": 1791569803.5843604,
+    "ast_hash": "6af7d1c096bb20abb0bea8c269c79209",
+    "semantic_hash": ""
+  },
+  "manage_inventory_cp.html": {
+    "mtime": 1784488722.8968074,
+    "seen": 1791569803.5843613,
+    "ast_hash": "846da326fbf3647db6e657159db4fbdd",
+    "semantic_hash": ""
+  },
+  "assets/Aldo Lanches logo.jpg": {
+    "mtime": 1775300955.541293,
+    "seen": 1791569803.5843618,
+    "ast_hash": "3515b3d7b1e59bc9881cb0ccf5fdfe67",
+    "semantic_hash": ""
+  },
+  "assets/logo-confeitaria-aldo-lanches.png": {
+    "mtime": 1774713008.2876956,
+    "seen": 1791569803.5843623,
+    "ast_hash": "2e2fff07299c5dc7bb068f61c575ed04",
+    "semantic_hash": ""
+  },
+  "assets/olther/ezgif.com-animated-gif-maker.gif": {
+    "mtime": 1775321940.5518918,
+    "seen": 1791569803.584363,
+    "ast_hash": "ea53b8bc6bcae06c2a501793d15cfb9e",
+    "semantic_hash": ""
+  },
+  "assets/standard image.jpg": {
+    "mtime": 1775153175.7902431,
+    "seen": 1791569803.584364,
+    "ast_hash": "aa9c7342e88111e644d8ded5208bc7fe",
+    "semantic_hash": ""
+  }
+}

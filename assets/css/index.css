@@ -1098,8 +1098,26 @@ img {
 }
 
 .package-customer-group h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 4px;
   font-size: .92rem;
+}
+
+.package-minimum {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #fff0d5;
+  color: #8a4b08;
+  font-size: .68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.package-component-choice .qty-btn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
 }
 
 .package-stock-warning,
