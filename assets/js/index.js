@@ -345,20 +345,31 @@ function getCartTotals() {
   return { count, total };
 }
 
-function getSellableGroupTotals() {
+function getSellableGroupTotals({ includePackageIds = [] } = {}) {
   const groups = new Map();
-  for (const pack of state.ingredientPackages.filter(candidate => candidate.is_active !== false && candidate.is_sellable === true && state.categories.some(category=>String(category.component_package_id||"")===String(candidate.id)))) {
-    groups.set(String(pack.id), { packageId:String(pack.id), pack, components:new Map(), allowance:0, totalPrice:0 });
-    for (const row of state.packageComponents.filter(entry => String(entry.package_id) === String(pack.id))) {
-      const member = { row, component:state.compMap[row.composition_id], config:{ default_quantity:0, free_allowance:0, max_quantity:state.compMap[row.composition_id]?.max_quantity ?? 4, consumption_per_unit:1, is_enabled:true } };
-      if (member.component && member.component.is_active !== false) groups.get(String(pack.id)).components.set(String(row.composition_id), { member, baseline:0, allowance:0, maxQuantity:0, quantity:0, adjustment:0 });
+  const sellablePackages = new Map(state.ingredientPackages
+    .filter(pack => pack.is_active !== false && pack.is_sellable === true)
+    .map(pack => [String(pack.id), pack]));
+  const ensureGroup = packageId => {
+    const key = String(packageId), pack = sellablePackages.get(key);
+    if (!pack) return null;
+    if (!groups.has(key)) {
+      const group = { packageId:key, pack, components:new Map(), allowance:0, totalPrice:0 };
+      for (const row of state.packageComponents.filter(entry => String(entry.package_id) === key)) {
+        const component = state.compMap[row.composition_id];
+        if (!component || component.is_active === false) continue;
+        const member = { row, component, config:{ default_quantity:0, free_allowance:0, max_quantity:component.max_quantity ?? 4, consumption_per_unit:1, is_enabled:true } };
+        group.components.set(String(row.composition_id), { member, baseline:0, allowance:0, maxQuantity:0, quantity:0, adjustment:0 });
+      }
+      groups.set(key, group);
     }
-  }
+    return groups.get(key);
+  };
   for (const entry of state.cart) {
     for (const group of getItemPackageGroups(entry.id).filter(candidate => candidate.pack.is_sellable === true)) {
       const key = String(group.pack.id);
-      if (!groups.has(key)) groups.set(key, { packageId:key, pack:group.pack, components:new Map(), allowance:0, totalPrice:0 });
-      const aggregate = groups.get(key);
+      const aggregate = ensureGroup(key);
+      if (!aggregate) continue;
       const link = group.link || {};
       if (group.pack.franchise_mode === "shared") aggregate.allowance += Math.max(0, Number(link.shared_free_allowance || 0)) * entry.qty;
       for (const member of group.members) {
@@ -372,6 +383,15 @@ function getSellableGroupTotals() {
       }
     }
   }
+  // A component-package category is available in the menu to everyone, but
+  // it must not leak into the cart until selected directly or supplied by a
+  // product already in the cart. Only explicitly positive direct quantities
+  // create a cart group here.
+  for (const [packageId, adjustments] of Object.entries(state.cartGroupAdjustments || {})) {
+    const directSelection = Object.values(adjustments || {}).some(value => Number(value) > 0);
+    if (directSelection) ensureGroup(packageId);
+  }
+  for (const packageId of includePackageIds) ensureGroup(packageId);
   for (const group of groups.values()) {
     const adjustments = state.cartGroupAdjustments[group.packageId] || {};
     let totalQuantity = 0;
@@ -399,11 +419,25 @@ function getSellableGroupTotals() {
 
 function updateSellableEntitlementNotices(groups=getSellableGroupTotals()) {
   document.querySelectorAll("[data-sellable-entitlement]").forEach(notice=>{
-    const group=groups.find(entry=>String(entry.packageId)===String(notice.dataset.sellableEntitlement));
+    const packageId=String(notice.dataset.sellableEntitlement);
+    const group=groups.find(entry=>String(entry.packageId)===packageId)
+      ||getSellableGroupTotals({includePackageIds:[packageId]}).find(entry=>String(entry.packageId)===packageId);
     if(!group)return;
     const chosen=[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0);
     const entitled=group.pack.franchise_mode==="shared"?group.allowance:[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0);
-    notice.textContent=`No seu carrinho, você tem direito a ${entitled} ${notice.dataset.categoryName}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.`;
+    const categoryName=escapeHtml(notice.dataset.categoryName||packageCustomerName(group.pack));
+    let priceMarkup="";
+    if(group.pack.franchise_mode==="shared"){
+      const price=Math.max(0,Number(group.components.values().next().value?.member.component.price||0));
+      priceMarkup=`<span class="sellable-price-highlight">Por unidade: <strong>${currency(price)}</strong>${group.totalPrice>0?` · Subtotal: <strong>${currency(group.totalPrice)}</strong>`:""}</span>`;
+    }else{
+      const prices=[...group.components.values()].map(component=>{
+        const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(component.member.row.composition_id));
+        return `${escapeHtml(presentation?.display_name||component.member.component.name)} ${currency(Math.max(0,Number(component.member.component.price||0)))}`;
+      });
+      if(prices.length)priceMarkup=`<span class="sellable-price-highlight">Preços: <strong>${prices.join(" · ")}</strong></span>`;
+    }
+    notice.innerHTML=`<span>No seu carrinho, você tem direito a ${entitled} ${categoryName}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.</span>${priceMarkup}`;
   });
 }
 
@@ -412,7 +446,7 @@ function saveCartGroupAdjustments() {
 }
 
 function adjustSellableGroup(packageId, componentId, delta) {
-  const group = getSellableGroupTotals().find(entry => entry.packageId === String(packageId));
+  const group = getSellableGroupTotals({ includePackageIds:[packageId] }).find(entry => entry.packageId === String(packageId));
   const component = group?.components.get(String(componentId));
   if (!component) return;
   const next = Math.max(0, Math.min(component.maxQuantity, component.quantity + Number(delta || 0)));
@@ -420,6 +454,22 @@ function adjustSellableGroup(packageId, componentId, delta) {
   state.cartGroupAdjustments[String(packageId)][String(componentId)] = next - component.baseline;
   saveCartGroupAdjustments();
   renderCart();
+  updateSellableCategoryControls();
+}
+
+function updateSellableCategoryControls() {
+  const packageIds = [...document.querySelectorAll(".sellable-component-card[data-package-id]")].map(card => card.dataset.packageId);
+  const groups = new Map(getSellableGroupTotals({ includePackageIds:packageIds }).map(group => [String(group.packageId), group]));
+  document.querySelectorAll(".sellable-component-card[data-package-id][data-component-id]").forEach(card => {
+    const component = groups.get(card.dataset.packageId)?.components.get(card.dataset.componentId);
+    if (!component) return;
+    const value = card.querySelector("[data-sellable-quantity]");
+    const minus = card.querySelector('[data-sellable-step="-1"]');
+    const plus = card.querySelector('[data-sellable-step="1"]');
+    if (value) value.textContent = String(component.quantity);
+    if (minus) minus.disabled = component.quantity <= 0;
+    if (plus) plus.disabled = component.quantity >= component.maxQuantity;
+  });
 }
 
 function buildSellableGroupOrderPayload() {
@@ -1790,8 +1840,12 @@ function renderBranch(category, children, itemsByCategory, sellableByCategory, d
         const title=presentation?.display_name||member.component.name,photo=safeImageUrl(presentation?.photo_url_1||"");
         card.className=`item-card sellable-component-card${photo?"":" no-photo"}`;
         card.dataset.search=normalize(`${title} ${presentation?.description||""} ${category.name}`);
-        card.innerHTML=`${photo?`<img class="item-photo" src="${photo}" alt="${escapeHtml(title)}" loading="lazy">`:""}<div><h4 class="item-name">${escapeHtml(title)}</h4>${presentation?.description?`<p class="item-desc">${escapeHtml(presentation.description)}</p>`:""}<div class="item-bottom"><span class="item-price">${currency(member.component.price)}</span><button type="button" class="add-btn">Adicionar</button></div></div>`;
-        card.querySelector("button").addEventListener("click",event=>{event.stopPropagation();adjustSellableGroup(group.pack.id,member.row.composition_id,1);setStatus(`${title} adicionado.`,`ok`)});
+        const current=group.totals.components.get(String(member.row.composition_id))||{quantity:0,maxQuantity:0};
+        card.dataset.packageId=String(group.pack.id);
+        card.dataset.componentId=String(member.row.composition_id);
+        const unavailable=current.maxQuantity<=0;
+        card.innerHTML=`${photo?`<img class="item-photo" src="${photo}" alt="${escapeHtml(title)}" loading="lazy">`:""}<div><h4 class="item-name">${escapeHtml(title)}</h4>${presentation?.description?`<p class="item-desc">${escapeHtml(presentation.description)}</p>`:""}${unavailable?'<small class="sellable-unavailable">Indisponível</small>':""}<div class="item-bottom"><span class="item-price">${currency(member.component.price)}</span><div class="sellable-card-quantity"><button type="button" class="qty-btn" data-sellable-step="-1" aria-label="Remover ${escapeHtml(title)}" ${current.quantity<=0?"disabled":""}>−</button><span class="qty-val" data-sellable-quantity>${current.quantity}</span><button type="button" class="qty-btn" data-sellable-step="1" aria-label="Adicionar ${escapeHtml(title)}" ${current.quantity>=current.maxQuantity?"disabled":""}>+</button></div></div></div>`;
+        card.querySelectorAll("[data-sellable-step]").forEach(button=>button.addEventListener("click",event=>{event.stopPropagation();adjustSellableGroup(group.pack.id,member.row.composition_id,Number(button.dataset.sellableStep))}));
         grid.appendChild(card);
       });
     });
@@ -1823,10 +1877,10 @@ function renderMenu(options = {}) {
   const { animateIntro = false } = options;
   const visibleItems = getVisibleItems(state.items, state.groups, state.groupAssociations);
   const { roots, children } = buildCategoryTree(state.categories);
-  const sellableByCategory=new Map(),sellableTotals=new Map(getSellableGroupTotals().map(group=>[String(group.packageId),group]));
+  const sellableByCategory=new Map(),sellableTotals=new Map(getSellableGroupTotals({includePackageIds:state.categories.map(category=>category.component_package_id).filter(Boolean)}).map(group=>[String(group.packageId),group]));
   state.categories.filter(category=>category.component_package_id).forEach(category=>{
     const pack=state.ingredientPackages.find(entry=>String(entry.id)===String(category.component_package_id));if(!pack||pack.is_active===false||pack.is_sellable!==true)return;
-    const members=state.packageComponents.filter(row=>String(row.package_id)===String(pack.id)).sort((a,b)=>Number(a.sort_priority||0)-Number(b.sort_priority||0)).map(row=>({row,component:state.compMap[row.composition_id],presentation:state.packagePresentations.find(presentation=>String(presentation.package_id)===String(pack.id)&&String(presentation.composition_id)===String(row.composition_id))})).filter(member=>member.component&&member.component.is_active!==false&&member.presentation?.is_active!==false&&(member.component.tracks_stock===false||Number(member.component.stock||0)>0));
+    const members=state.packageComponents.filter(row=>String(row.package_id)===String(pack.id)).sort((a,b)=>Number(a.sort_priority||0)-Number(b.sort_priority||0)).map(row=>({row,component:state.compMap[row.composition_id],presentation:state.packagePresentations.find(presentation=>String(presentation.package_id)===String(pack.id)&&String(presentation.composition_id)===String(row.composition_id))})).filter(member=>member.component&&member.component.is_active!==false&&member.presentation?.is_active!==false);
     if(!members.length)return;const key=String(category.id);if(!sellableByCategory.has(key))sellableByCategory.set(key,[]);sellableByCategory.get(key).push({pack,members,category,totals:sellableTotals.get(String(pack.id))||{allowance:0,freeRemaining:0,components:new Map()}});
   });
 
@@ -2174,13 +2228,9 @@ function openPackageItemModal(item, options, groups) {
   }).join("");
 
   const itemPriceBreakdown = getItemPriceBreakdown(item);
-  ui.modalBody.innerHTML = `<article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item"><div class="modal-scroll">${modalHead}<div class="modal-content"><h3 class="modal-title">${safeName}</h3><p class="modal-price" id="modalDynamicPrice">${currency(itemPriceBreakdown.total)}</p>${description ? `<p class="modal-text">${safeDescription}</p>` : ""}${isUnavailable ? '<p class="item-stock">Item indisponível no momento.</p>' : ""}<div class="comp-wrap"><button class="comp-head" id="compToggleBtn">Modificar</button><div class="comp-body" id="compBody"><div id="compInteractive">${groupsMarkup}</div></div></div><div class="obs-section"><div class="obs-title">Observação do item</div><textarea id="modalNote" class="modal-note" rows="3" placeholder="Observação (opcional)">${escapeHtml(cartEntry?.note || "")}</textarea></div></div></div>${!isUnavailable ? `<div class="modal-footer"><div class="modal-actions"><div class="qty-wrap"><button type="button" class="qty-btn" id="modalQtyMinus">-</button><span class="qty-val" id="modalQtyVal">1</span><button type="button" class="qty-btn" id="modalQtyPlus">+</button></div><button type="button" class="ghost-btn" id="modalViewCartBtn">Ver carrinho</button><button type="button" class="add-btn" id="modalAddBtn">${editIndex !== null ? "Salvar alterações" : "Adicionar ao carrinho"}</button></div></div>` : ""}</article>`;
+  ui.modalBody.innerHTML = `<article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item"><div class="modal-scroll mod-scroll-enabled">${modalHead}<div class="modal-content"><h3 class="modal-title">${safeName}</h3><p class="modal-price" id="modalDynamicPrice">${currency(itemPriceBreakdown.total)}</p>${description ? `<p class="modal-text">${safeDescription}</p>` : ""}${isUnavailable ? '<p class="item-stock">Item indisponível no momento.</p>' : ""}<div class="comp-wrap"><div class="comp-body show" id="compBody"><div id="compInteractive">${groupsMarkup}</div></div></div><div class="obs-section"><div class="obs-title">Observação do item</div><textarea id="modalNote" class="modal-note" rows="3" placeholder="Observação (opcional)">${escapeHtml(cartEntry?.note || "")}</textarea></div></div></div>${!isUnavailable ? `<div class="modal-footer"><div class="modal-actions"><div class="qty-wrap"><button type="button" class="qty-btn" id="modalQtyMinus">-</button><span class="qty-val" id="modalQtyVal">1</span><button type="button" class="qty-btn" id="modalQtyPlus">+</button></div><button type="button" class="ghost-btn" id="modalViewCartBtn">Ver carrinho</button><button type="button" class="add-btn" id="modalAddBtn">${editIndex !== null ? "Salvar alterações" : "Adicionar ao carrinho"}</button></div></div>` : ""}</article>`;
   ui.modal.classList.add("show");lockPageScroll();
   document.getElementById("modalClose")?.addEventListener("click", closeModal);
-  document.getElementById("compToggleBtn")?.addEventListener("click", () => {
-    const compBody=document.getElementById("compBody"),modalScroll=ui.modalBody.querySelector(".modal-scroll");
-    if(!compBody||!modalScroll)return;const showing=compBody.classList.toggle("show");modalScroll.classList.toggle("mod-scroll-enabled",showing);
-  });
   const compInteractive=document.getElementById("compInteractive"),dynamicPrice=document.getElementById("modalDynamicPrice");
   const refreshPackagePrice=()=>{const selection=getSelection();if(dynamicPrice&&selection.valid)dynamicPrice.textContent=currency(Math.max(0,itemPriceBreakdown.total+selection.extra));};
   compInteractive?.addEventListener("change",event=>{
@@ -2341,8 +2391,7 @@ function openItemModal(item, options = {}) {
   const compSection = validRows.length
     ? `
       <div class="comp-wrap">
-        <button class="comp-head" id="compToggleBtn">Modificar</button>
-        <div class="comp-body" id="compBody">
+        <div class="comp-body show" id="compBody">
           <div id="compInteractive"></div>
         </div>
       </div>
@@ -2365,7 +2414,7 @@ function openItemModal(item, options = {}) {
   const itemPriceBreakdown = getItemPriceBreakdown(item);
   ui.modalBody.innerHTML = `
     <article class="modal" role="dialog" aria-modal="true" aria-label="Detalhes do item">
-      <div class="modal-scroll">
+      <div class="modal-scroll mod-scroll-enabled">
         ${modalHead}
         <div class="modal-content">
           <h3 class="modal-title">${safeName}</h3>
@@ -2399,16 +2448,6 @@ function openItemModal(item, options = {}) {
   lockPageScroll();
 
   document.getElementById("modalClose")?.addEventListener("click", closeModal);
-  document.getElementById("compToggleBtn")?.addEventListener("click", () => {
-    const compBody = document.getElementById("compBody");
-    const modalScroll = ui.modalBody.querySelector(".modal-scroll");
-    if (!compBody || !modalScroll) {
-      return;
-    }
-
-    const isShowing = compBody.classList.toggle("show");
-    modalScroll.classList.toggle("mod-scroll-enabled", isShowing);
-  });
 
   const compInteractive = document.getElementById("compInteractive");
   const modalDynamicPrice = document.getElementById("modalDynamicPrice");
@@ -2590,8 +2629,8 @@ function bindEvents() {
     const button=event.target.closest("[data-customer-page]");if(!button)return;
     const page=button.dataset.customerPage;
     if(page!=="catalog"&&!state.user){startCustomerLogin(page);return}
-    if(page==="profile"){openAccountDialog();return}
     switchCustomerPage(page);
+    if(page==="profile")loadCustomerProfile().catch(error=>{console.error("Falha ao carregar cadastro:",error);setStatus("Não foi possível carregar seus dados.","err")});
     if(page==="orders"||page==="tracking")openCustomerOrders(state.selectedCustomerOrderId,page);
   });
   ui.profileForm.addEventListener("submit", saveCustomerProfile);

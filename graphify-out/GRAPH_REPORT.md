@@ -1,17 +1,17 @@
 # Graph Report - Cardapio_Aldo_Lanches  (2026-10-10)
 
 ## Corpus Check
-- 3 files · ~95,740 words
+- 3 files · ~95,934 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 4 file(s) not represented in the graph (top: .css 2, (none) 1, .cdr 1)
 
 ## Summary
-- 163 nodes · 491 edges · 14 communities (13 shown, 1 thin omitted)
+- 164 nodes · 498 edges · 14 communities (13 shown, 1 thin omitted)
 - Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 17 edges (avg confidence: 0.85)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f5f7bf9f`
+- Built from commit: `0a40dc03`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -32,28 +32,28 @@
 - normalize
 
 ## God Nodes (most connected - your core abstractions)
-1. `renderCart()` - 27 edges
-2. `bindEvents()` - 27 edges
+1. `bindEvents()` - 28 edges
+2. `renderCart()` - 27 edges
 3. `openPackageItemModal()` - 19 edges
 4. `submitAppOrder()` - 16 edges
 5. `openItemModal()` - 16 edges
 6. `renderMenu()` - 14 edges
 7. `init()` - 14 edges
 8. `startAppCheckout()` - 13 edges
-9. `openCheckoutConfirmation()` - 12 edges
-10. `setStatus()` - 12 edges
+9. `getSellableGroupTotals()` - 12 edges
+10. `openCheckoutConfirmation()` - 12 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `bindEvents()` --indirect_call--> `persistCart()`  [INFERRED]
   assets/js/index.js → assets/js/index.js  _Bridges community 2 → community 1_
 - `saveCustomerProfile()` --calls--> `getUserDisplayName()`  [EXTRACTED]
   assets/js/index.js → assets/js/index.js  _Bridges community 3 → community 1_
-- `startCustomerLogin()` --calls--> `savePendingCheckoutSnapshot()`  [EXTRACTED]
-  assets/js/index.js → assets/js/index.js  _Bridges community 1 → community 0_
-- `savePendingCheckoutSnapshot()` --calls--> `persistCart()`  [EXTRACTED]
-  assets/js/index.js → assets/js/index.js  _Bridges community 0 → community 2_
+- `openCheckoutConfirmation()` --calls--> `savePendingCheckoutSnapshot()`  [EXTRACTED]
+  assets/js/index.js → assets/js/index.js  _Bridges community 2 → community 0_
 - `init()` --calls--> `restorePendingCheckoutSnapshot()`  [EXTRACTED]
   assets/js/index.js → assets/js/index.js  _Bridges community 2 → community 7_
+- `init()` --calls--> `initializeCustomerAuth()`  [EXTRACTED]
+  assets/js/index.js → assets/js/index.js  _Bridges community 1 → community 7_
 
 ## Import Cycles
 - None detected.
@@ -62,14 +62,14 @@
 
 ### Community 0 - "openPackageItemModal"
 Cohesion: 0.14
-Nodes (32): buildEntryOptionsText(), buildEntrySignature(), buildOrderPackageState(), buildSearchCompositionText(), closeModal(), createItemCard(), currency(), escapeHtml() (+24 more)
+Nodes (33): buildEntryOptionsText(), buildEntrySignature(), buildOrderPackageState(), buildSearchCompositionText(), closeModal(), createItemCard(), currency(), escapeHtml() (+25 more)
 
 ### Community 1 - "bindEvents"
-Cohesion: 0.23
+Cohesion: 0.24
 Nodes (21): bindEvents(), closeCart(), closeCheckoutConfirmation(), closeCustomerOrderDetail(), hasCompleteOrderProfile(), initializeCustomerAuth(), loadCustomerProfile(), openAccountDialog() (+13 more)
 
 ### Community 2 - "renderCart"
-Cohesion: 0.19
+Cohesion: 0.18
 Nodes (20): addToCart(), adjustSellableGroup(), buildOrderMessage(), buildSellableGroupOrderPayload(), checkoutWhatsApp(), copyOrderMessage(), getCartTotals(), getCurrentAvailabilityMap() (+12 more)
 
 ### Community 3 - "js/index.js"
@@ -121,9 +121,9 @@ Nodes (4): getVisibleCards(), nextVisibleReactDelayMs(), scheduleVisibleReactLoo
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `bindEvents()` connect `bindEvents` to `openPackageItemModal`, `renderCart`, `js/index.js`, `init`, `renderMenu`?**
-  _High betweenness centrality (0.010) - this node is a cross-community bridge._
+  _High betweenness centrality (0.011) - this node is a cross-community bridge._
 - **Why does `renderCart()` connect `renderCart` to `openPackageItemModal`, `bindEvents`, `js/index.js`, `init`?**
-  _High betweenness centrality (0.010) - this node is a cross-community bridge._
+  _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **Why does `openPackageItemModal()` connect `openPackageItemModal` to `bindEvents`, `renderCart`, `js/index.js`?**
   _High betweenness centrality (0.004) - this node is a cross-community bridge._
 - **Are the 9 inferred relationships involving `bindEvents()` (e.g. with `closeCart()` and `closeCheckoutConfirmation()`) actually correct?**
@@ -131,4 +131,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `ORDER_STAGES`, `db`, `state` to the rest of the system?**
   _7 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `openPackageItemModal` be split into smaller, more focused modules?**
-  _Cohesion score 0.13709677419354838 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.13636363636363635 - nodes in this community are weakly interconnected._

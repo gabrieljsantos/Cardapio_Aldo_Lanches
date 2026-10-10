@@ -1769,3 +1769,20 @@ body.modal-open {
     display: none;
   }
 }
+
+/* A navegação do cliente permanece acessível no rodapé em todas as páginas. */
+.page-shell{padding-bottom:92px}
+.customer-tabs{position:fixed;left:50%;bottom:calc(10px + env(safe-area-inset-bottom));z-index:950;width:min(var(--max),calc(100vw - 20px));margin:0;transform:translateX(-50%);padding:6px;border:1px solid #d7e0e7;border-radius:18px;background:#ffffffed;box-shadow:0 10px 30px #18283a20;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.customer-tab{min-width:0;padding:8px 10px;white-space:nowrap}
+.cart-fab{bottom:calc(84px + env(safe-area-inset-bottom))}
+.sellable-card-quantity{display:flex;align-items:center;gap:5px;flex:0 0 auto}
+.sellable-card-quantity .qty-btn{width:38px;height:38px;min-width:38px;padding:0;font-size:1.2rem;font-weight:800}
+.sellable-card-quantity .qty-val{min-width:24px;text-align:center;font-size:.95rem;font-weight:800}
+.sellable-card-quantity .qty-btn:disabled{opacity:.42;cursor:not-allowed}
+.sellable-unavailable{display:block;margin-top:4px;color:var(--danger);font-weight:700}
+.cart-head #closeCartBtn{font-weight:700;color:var(--primary-strong)}
+.comp-body.show{display:block;padding:10px 12px}
+.sellable-entitlement{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.sellable-price-highlight{display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:999px;background:#ffead7;color:#9a3412;font-weight:700;white-space:normal}
+.sellable-price-highlight strong{font-size:1rem;color:#7c2d12}
+@media(max-width:520px){.customer-tabs{gap:3px;padding:4px}.customer-tab{min-height:42px;padding:7px 6px;font-size:.75rem}.page-shell{padding-bottom:88px}.cart-fab{right:10px;bottom:calc(82px + env(safe-area-inset-bottom));min-width:138px;padding:10px 12px}.sellable-card-quantity .qty-btn{width:34px;height:36px;min-width:34px}.sellable-component-card{grid-template-columns:minmax(0,1fr)!important}.sellable-component-card .item-photo{width:100%;height:clamp(125px,45vw,190px)}}
