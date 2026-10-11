@@ -376,7 +376,7 @@ function getSellableGroupTotals({ includePackageIds = [] } = {}) {
     const key = String(packageId), pack = sellablePackages.get(key);
     if (!pack) return null;
     if (!groups.has(key)) {
-      const group = { packageId:key, pack, components:new Map(), allowance:0, totalPrice:0, cartPresentation:"minimized", creditMode:false, freeRemaining:0 };
+      const group = { packageId:key, pack, components:new Map(), allowance:0, totalPrice:0, creditMode:false, freeRemaining:0 };
       for (const row of state.packageComponents.filter(entry => String(entry.package_id) === key)) {
         const component = state.compMap[row.composition_id];
         if (!component || component.is_active === false) continue;
@@ -393,7 +393,6 @@ function getSellableGroupTotals({ includePackageIds = [] } = {}) {
       const aggregate = ensureGroup(key);
       if (!aggregate) continue;
       const link = group.link || {};
-      if (link.cart_presentation === "explicit") aggregate.cartPresentation = "explicit";
       if (link.association_profile_id) { const profile=state.associationProfiles.find(row=>String(row.id)===String(link.association_profile_id));aggregate.creditMode=true;aggregate.allowance += Math.max(0,Number(profile?.credit_allowance||0))*entry.qty; }
       else if (group.pack.franchise_mode === "shared") aggregate.allowance += Math.max(0, Number(link.shared_free_allowance || 0)) * entry.qty;
       for (const member of group.members) {
@@ -730,7 +729,7 @@ function renderCart() {
     const stockWarning=[...group.components.values()].some(component=>component.quantity>component.maxQuantity)?'<p class="cart-item-warning">A quantidade supera o estoque disponível.</p>':"";
     const resetButton=`<div class="cart-sellable-actions"><button type="button" class="ghost-btn" data-reset-sellable-package="${escapeHtml(group.packageId)}">Resetar para o padrão</button></div>`;
     const body=`${allowance}${resetButton}${stockWarning}${components}`;
-    return group.cartPresentation==="explicit"?`<details open class="cart-item cart-sellable-group cart-sellable-explicit"><summary>${escapeHtml(categoryName)}</summary>${body}</details>`:`<details class="cart-item cart-sellable-group cart-sellable-minimized"><summary>${escapeHtml(categoryName)}</summary>${body}</details>`;
+    return `<section class="cart-item cart-sellable-group"><h4 class="cart-sellable-heading">${escapeHtml(categoryName)}</h4>${body}</section>`;
   }).join("");
   ui.cartList.innerHTML = itemMarkup + pooledMarkup;
 

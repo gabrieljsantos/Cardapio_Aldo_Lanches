@@ -1334,8 +1334,7 @@ body.modal-open {
   padding: 10px;
 }
 
-.cart-sellable-group > summary{font-weight:800;cursor:pointer;padding:2px 0}
-.cart-sellable-group[open] > summary{margin-bottom:8px}
+.cart-sellable-heading{font-size:1rem;font-weight:800;margin:0 0 8px;padding:2px 0}
 
 .cart-item.has-photo{display:grid;grid-template-columns:72px minmax(0,1fr);align-items:start;gap:12px}
 .cart-item-photo{width:72px;height:72px;object-fit:cover;border-radius:10px;background:var(--surface-soft)}
