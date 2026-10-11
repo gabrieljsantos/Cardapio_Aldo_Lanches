@@ -814,7 +814,7 @@ function openCheckoutConfirmation() {
     escapeHtml(state.profile?.phone || ""),
     escapeHtml([state.profile?.street, state.profile?.landmark, state.profile?.address_extra].filter(Boolean).join(" · "))
   ].filter(Boolean).join("<br>");
-  const pooledConfirm=getSellableGroupTotals().filter(group=>[...group.components.values()].some(component=>component.quantity>0)).map(group=>{const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),components=[...group.components.entries()].filter(([,component])=>component.quantity>0).map(([componentId,component])=>{const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId)),photo=safeImageUrl(presentation?.photo_url_1||"");return `${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<small>${component.quantity}× ${escapeHtml(presentation?.display_name||component.member.component.name)}</small>`}).join("");return `<article class="order-confirm-item"><div><strong>${escapeHtml(categoryName)}</strong><div class="order-confirm-presentations">${components}</div><small>Você ainda pode escolher ${group.freeRemaining} ${escapeHtml(categoryName)}.</small></div><span>${currency(group.totalPrice)}</span></article>`}).join("");
+  const pooledConfirm=getSellableGroupTotals().filter(group=>[...group.components.values()].some(component=>component.adjustment!==0)).map(group=>{const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),components=[...group.components.entries()].filter(([,component])=>component.adjustment!==0).map(([componentId,component])=>{const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId)),photo=safeImageUrl(presentation?.photo_url_1||"");return `${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<small>${component.quantity}× ${escapeHtml(presentation?.display_name||component.member.component.name)}${component.quantity===0?" (removido)":""}</small>`}).join("");return `<article class="order-confirm-item"><div><strong>${escapeHtml(categoryName)}</strong><div class="order-confirm-presentations">${components}</div></div><span>${currency(group.totalPrice)}</span></article>`}).join("");
   ui.checkoutConfirmItems.innerHTML = state.cart.map((entry) => `
     <article class="order-confirm-item">
       <div><strong>${Number(entry.qty)}× ${escapeHtml(entry.name)}</strong>
@@ -1051,7 +1051,7 @@ function showCustomerOrderDetail(order) {
       .map((component) => `${escapeHtml(component.component_name)}${Number(component.quantity) > 1 ? ` ×${Number(component.quantity)}` : ""}`).join(" · ");
     return `<article class="customer-order-line"><div><strong>${Number(item.quantity)}× ${escapeHtml(item.item_name)}</strong>${components ? `<small>${components}</small>` : ""}${item.notes ? `<small>${escapeHtml(item.notes)}</small>` : ""}</div><span>${currency(Number(item.unit_price) * Number(item.quantity))}</span></article>`;
   }).join("");
-  const pooled = (order.order_sellable_component_totals || []).filter(component => Number(component.quantity) > 0).map(component => {const photo=safeImageUrl(component.snapshot?.representation?.photo_url_1||"");return `<article class="customer-order-line customer-component-order-line">${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<div><strong>${escapeHtml(component.component_name)}</strong><small>${Number(component.quantity)}×${Number(component.manual_adjustment) ? ` · ajuste manual ${Number(component.manual_adjustment) > 0 ? "+" : ""}${Number(component.manual_adjustment)}` : ""}${component.snapshot?.representation?.description?` · ${escapeHtml(component.snapshot.representation.description)}`:""}</small></div><span>${currency(Number(component.charged_quantity || 0) * Number(component.unit_price || 0))}</span></article>`}).join("");
+  const pooled = (order.order_sellable_component_totals || []).filter(component => Number(component.manual_adjustment) !== 0).map(component => {const photo=safeImageUrl(component.snapshot?.representation?.photo_url_1||"");return `<article class="customer-order-line customer-component-order-line">${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<div><strong>${escapeHtml(component.component_name)}</strong><small>${Number(component.quantity)}×${Number(component.quantity)===0?" (removido)":""}${component.snapshot?.representation?.description?` · ${escapeHtml(component.snapshot.representation.description)}`:""}</small></div><span>${currency(Number(component.charged_quantity || 0) * Number(component.unit_price || 0))}</span></article>`}).join("");
   ui.customerOrderDetail.innerHTML = `<div class="order-tracking-head"><strong>${escapeHtml(order.customer_known_as || state.profile?.known_as || "Pedido")}</strong><span>${new Date(order.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</span></div>
     <ol class="order-timeline">${timeline}</ol><div class="customer-order-lines">${items}${pooled}</div>
     ${order.notes ? `<p class="customer-order-notes">${escapeHtml(order.notes)}</p>` : ""}
@@ -1179,15 +1179,15 @@ function buildOrderMessage() {
   });
 
   getSellableGroupTotals().forEach(group => {
-    if (![...group.components.values()].some(component=>component.quantity>0)) return;
+    const modifiedComponents=[...group.components.entries()].filter(([,component])=>component.adjustment!==0);
+    if (!modifiedComponents.length) return;
     const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack);
     lines.push(`• ${categoryName}:`);
-    for (const [componentId,component] of group.components) {
+    for (const [componentId,component] of modifiedComponents) {
       const presentation=state.packagePresentations.find(row=>String(row.package_id)===String(group.packageId)&&String(row.composition_id)===String(componentId));
-      if (component.quantity > 0) lines.push(`  ${component.quantity}x ${presentation?.display_name||component.member.component.name}`);
+      const componentName=presentation?.display_name||component.member.component.name;
+      lines.push(component.quantity>0?`  ${component.quantity}x ${componentName}`:`  0x ${componentName} (removido)`);
     }
-    if (group.pack.franchise_mode !== "none") lines.push(`  Você ainda pode escolher ${group.freeRemaining} ${categoryName}.`);
-    if (group.totalPrice > 0) lines.push(`  Adicionais: ${currency(group.totalPrice)}`);
     lines.push("");
   });
 
