@@ -29,6 +29,9 @@ const state = {
   ingredientPackages: [],
   packageComponents: [],
   packagePresentations: [],
+  associationProfiles: [],
+  associationProfileComponents: [],
+  itemAssociationProfiles: [],
   itemPackages: [],
   itemComponentConfigs: [],
   groups: [],
@@ -373,7 +376,7 @@ function getSellableGroupTotals({ includePackageIds = [] } = {}) {
     const key = String(packageId), pack = sellablePackages.get(key);
     if (!pack) return null;
     if (!groups.has(key)) {
-      const group = { packageId:key, pack, components:new Map(), allowance:0, totalPrice:0 };
+      const group = { packageId:key, pack, components:new Map(), allowance:0, totalPrice:0, cartPresentation:"minimized", creditMode:false, freeRemaining:0 };
       for (const row of state.packageComponents.filter(entry => String(entry.package_id) === key)) {
         const component = state.compMap[row.composition_id];
         if (!component || component.is_active === false) continue;
@@ -390,7 +393,9 @@ function getSellableGroupTotals({ includePackageIds = [] } = {}) {
       const aggregate = ensureGroup(key);
       if (!aggregate) continue;
       const link = group.link || {};
-      if (group.pack.franchise_mode === "shared") aggregate.allowance += Math.max(0, Number(link.shared_free_allowance || 0)) * entry.qty;
+      if (link.cart_presentation === "explicit") aggregate.cartPresentation = "explicit";
+      if (link.association_profile_id) { const profile=state.associationProfiles.find(row=>String(row.id)===String(link.association_profile_id));aggregate.creditMode=true;aggregate.allowance += Math.max(0,Number(profile?.credit_allowance||0))*entry.qty; }
+      else if (group.pack.franchise_mode === "shared") aggregate.allowance += Math.max(0, Number(link.shared_free_allowance || 0)) * entry.qty;
       for (const member of group.members) {
         const componentId = String(member.row.composition_id);
         if (!aggregate.components.has(componentId)) aggregate.components.set(componentId, { member, baseline:0, allowance:0, quantity:0, adjustment:0 });
@@ -432,6 +437,17 @@ function getSellableGroupTotals({ includePackageIds = [] } = {}) {
       group.totalPrice = Math.max(0, totalQuantity - group.allowance) * price;
       group.freeRemaining = Math.max(0, group.allowance - totalQuantity);
     }
+    if(group.creditMode){
+      let remainingCredits=group.allowance;
+      const ordered=[...group.components.values()].sort((a,b)=>Number(a.member.row.sort_priority||0)-Number(b.member.row.sort_priority||0));
+      for(const component of ordered){
+        const creditCost=Math.max(.001,Number(component.member.row.credit_cost??1));
+        const freeUnits=Math.min(component.quantity,Math.floor((remainingCredits+1e-9)/creditCost));
+        component.allowance=freeUnits;remainingCredits=Math.max(0,remainingCredits-freeUnits*creditCost);
+      }
+      group.totalPrice=[...group.components.values()].reduce((sum,component)=>sum+Math.max(0,component.quantity-component.allowance)*Math.max(0,Number(component.member.component.price||0)),0);
+      group.freeRemaining=Math.max(0,...ordered.map(component=>Math.min(component.maxQuantity-component.quantity,Math.floor((remainingCredits+1e-9)/Math.max(.001,Number(component.member.row.credit_cost??1))))));
+    }
   }
   return [...groups.values()];
 }
@@ -456,7 +472,8 @@ function updateSellableEntitlementNotices(groups=getSellableGroupTotals()) {
       });
       if(prices.length)priceMarkup=`<span class="sellable-price-highlight">Preços: <strong>${prices.join(" · ")}</strong></span>`;
     }
-    notice.innerHTML=`<span>No seu carrinho, você tem direito a ${entitled} ${categoryName}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.</span>${priceMarkup}`;
+    const entitlementText=group.creditMode?`Você escolheu ${chosen}; ${entitled} estão incluídos. Ainda pode escolher ${group.freeRemaining} unidade(s) dentro da franquia.`:`No seu carrinho, você tem direito a ${entitled} ${categoryName}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.`;
+    notice.innerHTML=`<span>${entitlementText}</span>${priceMarkup}`;
   });
 }
 
@@ -497,7 +514,6 @@ function buildSellableGroupOrderPayload() {
     name: String(group.pack.name || ""),
     customer_name: packageCustomerName(group.pack),
     franchise_mode: group.pack.franchise_mode || "none",
-    allowance: Math.max(0, Math.trunc(group.allowance || 0)),
     components: [...group.components.entries()].map(([compositionId, component]) => ({
       composition_id: compositionId,
       quantity: Math.max(0, Math.trunc(component.quantity)),
@@ -701,9 +717,10 @@ function renderCart() {
       <div class="cart-pooled-component"><div class="cart-pooled-component-identity">${photo?`<img src="${photo}" alt="" loading="lazy">`:""}<div><strong>${escapeHtml(title)}</strong>${presentation?.description?`<small>${escapeHtml(presentation.description)}</small>`:""}</div></div>
         <div class="qty-wrap"><button type="button" class="qty-btn" data-pool-step="-1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" aria-label="Remover ${escapeHtml(title)}" ${component.quantity<=0?"disabled":""}>−</button><span class="qty-val">${component.quantity}</span><button type="button" class="qty-btn" data-pool-step="1" data-package-id="${escapeHtml(group.packageId)}" data-component-id="${escapeHtml(componentId)}" aria-label="Adicionar ${escapeHtml(title)}" title="${component.maxQuantity<=component.quantity&&component.member.component.tracks_stock!==false?"Limite de estoque atingido":"Adicionar"}" ${component.quantity>=component.maxQuantity?"disabled":""}>+</button></div>
       </div>`}).join("");
-    const category=state.categories.find(entry=>String(entry.component_package_id||"")===String(group.packageId)),categoryName=category?.name||packageCustomerName(group.pack),entitled=group.pack.franchise_mode==="shared"?group.allowance:[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0),chosen=[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0),extraQuantity=group.pack.franchise_mode==="shared"?Math.max(0,chosen-group.allowance):[...group.components.values()].reduce((sum,component)=>sum+Math.max(0,component.quantity-component.allowance),0),extraPrice=extraQuantity>0?`<span class="sellable-price-highlight cart-extra-price">Extras (${extraQuantity}): <strong>${currency(group.totalPrice)}</strong></span>`:"",allowance = `<div class="cart-sellable-summary"><p class="item-desc">No seu carrinho, você tem direito a ${entitled} ${escapeHtml(categoryName)}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.</p>${extraPrice}</div>`;
+    const categoryName=packageCustomerName(group.pack),includedChosen=[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0),chosen=[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0),extraQuantity=[...group.components.values()].reduce((sum,component)=>sum+Math.max(0,component.quantity-component.allowance),0),extraPrice=extraQuantity>0?`<span class="sellable-price-highlight cart-extra-price">Extras (${extraQuantity}): <strong>${currency(group.totalPrice)}</strong></span>`:"",description=group.creditMode?`Você escolheu ${chosen}; ${includedChosen} estão incluídos. Ainda pode escolher ${group.freeRemaining} unidade(s) dentro da franquia.`:`Você ainda tem direito a ${group.allowance} ${escapeHtml(categoryName)}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.`,allowance = `<div class="cart-sellable-summary"><p class="item-desc">${description}</p>${extraPrice}</div>`;
     const stockWarning=[...group.components.values()].some(component=>component.quantity>component.maxQuantity)?'<p class="cart-item-warning">A quantidade supera o estoque disponível.</p>':"";
-    return `<section class="cart-item cart-sellable-group"><h4>${escapeHtml(categoryName)}</h4>${allowance}${stockWarning}${components}</section>`;
+    const body=`${allowance}${stockWarning}${components}`;
+    return group.cartPresentation==="explicit"?`<details open class="cart-item cart-sellable-group cart-sellable-explicit"><summary>${escapeHtml(categoryName)}</summary>${body}</details>`:`<details class="cart-item cart-sellable-group cart-sellable-minimized"><summary>${escapeHtml(categoryName)}</summary>${body}</details>`;
   }).join("");
   ui.cartList.innerHTML = itemMarkup + pooledMarkup;
 
@@ -1550,7 +1567,7 @@ function buildInlineCompositionText(itemId) {
     const seen = new Set();
     const names = [];
     const formatQty = value => Number.isInteger(value) ? String(value) : String(value).replace(".", ",");
-    packageGroups.filter(group => group.pack.show_defaults_in_item !== false).forEach(group => group.members.forEach(member => {
+    packageGroups.filter(group => group.pack.show_defaults_in_item !== false && (group.pack.is_sellable !== true || group.link?.show_in_item_description !== false)).forEach(group => group.members.forEach(member => {
       const quantity = Math.max(0, Number(member.config.default_quantity || 0));
       const componentId = String(member.component.id);
       const name = String(member.component.name || "").trim();
@@ -1920,12 +1937,9 @@ function renderMenu(options = {}) {
   const { animateIntro = false } = options;
   const visibleItems = getVisibleItems(state.items, state.groups, state.groupAssociations);
   const { roots, children } = buildCategoryTree(state.categories);
-  const sellableByCategory=new Map(),sellableTotals=new Map(getSellableGroupTotals({includePackageIds:state.categories.map(category=>category.component_package_id).filter(Boolean)}).map(group=>[String(group.packageId),group]));
-  state.categories.filter(category=>category.component_package_id).forEach(category=>{
-    const pack=state.ingredientPackages.find(entry=>String(entry.id)===String(category.component_package_id));if(!pack||pack.is_active===false||pack.is_sellable!==true)return;
-    const members=state.packageComponents.filter(row=>String(row.package_id)===String(pack.id)).sort((a,b)=>Number(a.sort_priority||0)-Number(b.sort_priority||0)).map(row=>({row,component:state.compMap[row.composition_id],presentation:state.packagePresentations.find(presentation=>String(presentation.package_id)===String(pack.id)&&String(presentation.composition_id)===String(row.composition_id))})).filter(member=>member.component&&member.component.is_active!==false&&member.presentation?.is_active!==false);
-    if(!members.length)return;const key=String(category.id);if(!sellableByCategory.has(key))sellableByCategory.set(key,[]);sellableByCategory.get(key).push({pack,members,category,totals:sellableTotals.get(String(pack.id))||{allowance:0,freeRemaining:0,components:new Map()}});
-  });
+  // A vitrine category for sellable components is kept in the data model for
+  // later reactivation, but is intentionally dormant in the customer menu.
+  const sellableByCategory=new Map(),sellableTotals=new Map(getSellableGroupTotals().map(group=>[String(group.packageId),group]));
 
   const itemsByCategory = new Map();
   visibleItems.forEach((item) => {
@@ -2087,15 +2101,13 @@ function getItemPackageGroups(itemId) {
       const members = state.packageComponents
         .filter(row => String(row.package_id) === String(pack.id))
         .sort((a, b) => Number(a.sort_priority || 0) - Number(b.sort_priority || 0))
-        .map(row => ({
-          row,
-          component: state.compMap[row.composition_id],
-          config: state.itemComponentConfigs.find(config =>
-            String(config.item_id) === String(itemId)
-            && String(config.package_id) === String(pack.id)
-            && String(config.composition_id) === String(row.composition_id)
-          ) || { default_quantity: 0, free_allowance: 0, max_quantity: 4, consumption_per_unit: 1, is_enabled: true }
-        }))
+        .map(row => {
+          const itemConfig=state.itemComponentConfigs.find(config => String(config.item_id)===String(itemId)&&String(config.package_id)===String(pack.id)&&String(config.composition_id)===String(row.composition_id));
+          const profileConfig=link.association_profile_id?state.associationProfileComponents.find(config=>String(config.profile_id)===String(link.association_profile_id)&&String(config.composition_id)===String(row.composition_id)):null;
+          return {row,component:state.compMap[row.composition_id],config:link.association_profile_id
+            ? {default_quantity:profileConfig?.default_quantity??0,free_allowance:0,max_quantity:state.compMap[row.composition_id]?.max_quantity??4,consumption_per_unit:1,is_enabled:true}
+            : itemConfig || {default_quantity:0,free_allowance:0,max_quantity:4,consumption_per_unit:1,is_enabled:true}};
+        })
         .filter(member => member.component && member.config.is_enabled !== false && member.component.is_active !== false);
       return { link, pack, members };
     })
@@ -2885,6 +2897,9 @@ async function loadData() {
     packagePresentations,
     itemPackages,
     itemComponentConfigs,
+    associationProfiles,
+    associationProfileComponents,
+    itemAssociationProfiles,
     groupsRes,
     groupAssocRes
   ] = await Promise.all([
@@ -2898,6 +2913,9 @@ async function loadData() {
     loadOptionalPackageTable("package_component_presentation"),
     loadOptionalPackageTable("item_package"),
     loadOptionalPackageTable("item_component_config"),
+    loadOptionalPackageTable("component_group_association_profile"),
+    loadOptionalPackageTable("component_group_association_profile_component"),
+    loadOptionalPackageTable("item_association_profile"),
     db.from("item_group").select("*"),
     db.from("item_group_association").select("*")
   ]);
@@ -2923,7 +2941,15 @@ async function loadData() {
   state.ingredientPackages = ingredientPackages;
   state.packageComponents = packageComponents;
   state.packagePresentations = packagePresentations;
-  state.itemPackages = itemPackages;
+  state.associationProfiles = associationProfiles;
+  state.associationProfileComponents = associationProfileComponents;
+  state.itemAssociationProfiles = itemAssociationProfiles;
+  const sellableIds = new Set(ingredientPackages.filter(pack=>pack.is_sellable===true).map(pack=>String(pack.id)));
+  const profilesById = new Map(associationProfiles.map(profile=>[String(profile.id),profile]));
+  state.itemPackages = [
+    ...itemPackages.filter(link=>!sellableIds.has(String(link.package_id))),
+    ...itemAssociationProfiles.flatMap(link=>{const profile=profilesById.get(String(link.profile_id));return profile?[{item_id:link.item_id,package_id:profile.package_id,cart_pooling:true,sort_priority:0,association_profile_id:profile.id,cart_presentation:link.cart_presentation,show_in_item_description:link.show_in_item_description}]:[]})
+  ];
   state.itemComponentConfigs = itemComponentConfigs;
   state.groups = groupsRes.data || [];
   state.groupAssociations = groupAssocRes.data || [];
