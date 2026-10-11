@@ -1786,6 +1786,7 @@ body.modal-open {
 .sellable-price-highlight strong{font-size:1rem;color:#7c2d12}
 .cart-sellable-summary{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .cart-sellable-summary .item-desc{flex:1 1 260px;margin:0}
+.cart-sellable-actions{display:flex;justify-content:flex-end;margin:8px 0}
 .cart-extra-price{flex:0 0 auto;padding:6px 11px;border:1px solid #f6c697;font-size:.9rem}
 .cart-extra-price strong{font-size:1.08rem!important}
 @media(max-width:520px){.cart-sellable-summary{align-items:flex-start}.cart-extra-price{margin-left:auto}}

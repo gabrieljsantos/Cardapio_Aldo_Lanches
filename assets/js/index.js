@@ -493,6 +493,15 @@ function adjustSellableGroup(packageId, componentId, delta) {
   updateSellableCategoryControls();
 }
 
+function resetSellableGroupToDefaults(packageId) {
+  const key=String(packageId);
+  if(!Object.prototype.hasOwnProperty.call(state.cartGroupAdjustments||{},key))return;
+  delete state.cartGroupAdjustments[key];
+  saveCartGroupAdjustments();
+  renderCart();
+  updateSellableCategoryControls();
+}
+
 function updateSellableCategoryControls() {
   const packageIds = [...document.querySelectorAll(".sellable-component-card[data-package-id]")].map(card => card.dataset.packageId);
   const groups = new Map(getSellableGroupTotals({ includePackageIds:packageIds }).map(group => [String(group.packageId), group]));
@@ -719,7 +728,8 @@ function renderCart() {
       </div>`}).join("");
     const categoryName=packageCustomerName(group.pack),includedChosen=[...group.components.values()].reduce((sum,component)=>sum+component.allowance,0),chosen=[...group.components.values()].reduce((sum,component)=>sum+component.quantity,0),extraQuantity=[...group.components.values()].reduce((sum,component)=>sum+Math.max(0,component.quantity-component.allowance),0),extraPrice=extraQuantity>0?`<span class="sellable-price-highlight cart-extra-price">Extras (${extraQuantity}): <strong>${currency(group.totalPrice)}</strong></span>`:"",description=group.creditMode?`Você escolheu ${chosen}; ${includedChosen} estão incluídos. Ainda pode escolher ${group.freeRemaining} unidade(s) dentro da franquia.`:`Você ainda tem direito a ${group.allowance} ${escapeHtml(categoryName)}. Você já escolheu ${chosen}; ainda pode escolher ${group.freeRemaining}.`,allowance = `<div class="cart-sellable-summary"><p class="item-desc">${description}</p>${extraPrice}</div>`;
     const stockWarning=[...group.components.values()].some(component=>component.quantity>component.maxQuantity)?'<p class="cart-item-warning">A quantidade supera o estoque disponível.</p>':"";
-    const body=`${allowance}${stockWarning}${components}`;
+    const resetButton=`<div class="cart-sellable-actions"><button type="button" class="ghost-btn" data-reset-sellable-package="${escapeHtml(group.packageId)}">Resetar para o padrão</button></div>`;
+    const body=`${allowance}${resetButton}${stockWarning}${components}`;
     return group.cartPresentation==="explicit"?`<details open class="cart-item cart-sellable-group cart-sellable-explicit"><summary>${escapeHtml(categoryName)}</summary>${body}</details>`:`<details class="cart-item cart-sellable-group cart-sellable-minimized"><summary>${escapeHtml(categoryName)}</summary>${body}</details>`;
   }).join("");
   ui.cartList.innerHTML = itemMarkup + pooledMarkup;
@@ -2733,6 +2743,8 @@ function bindEvents() {
   ui.closeCartBtn.addEventListener("click", closeCart);
   ui.cartNote.addEventListener("input", persistCart);
   ui.cartList.addEventListener("click", (event) => {
+    const resetSellable=event.target.closest("[data-reset-sellable-package]");
+    if(resetSellable){resetSellableGroupToDefaults(resetSellable.dataset.resetSellablePackage);return}
     const poolStep=event.target.closest("[data-pool-step]");
     if(poolStep){adjustSellableGroup(poolStep.dataset.packageId,poolStep.dataset.componentId,Number(poolStep.dataset.poolStep));return}
     const editIndex = event.target.getAttribute("data-cart-edit");
