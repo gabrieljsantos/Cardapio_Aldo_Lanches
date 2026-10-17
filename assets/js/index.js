@@ -2115,7 +2115,7 @@ function getItemPackageGroups(itemId) {
           const profileConfig=link.association_profile_id?state.associationProfileComponents.find(config=>String(config.profile_id)===String(link.association_profile_id)&&String(config.composition_id)===String(row.composition_id)):null;
           return {row,component:state.compMap[row.composition_id],config:link.association_profile_id
             ? {default_quantity:profileConfig?.default_quantity??0,free_allowance:0,max_quantity:state.compMap[row.composition_id]?.max_quantity??4,consumption_per_unit:1,is_enabled:true}
-            : itemConfig || {default_quantity:0,free_allowance:0,max_quantity:4,consumption_per_unit:1,is_enabled:true}};
+        : itemConfig || {default_quantity:0,free_allowance:0,max_quantity:4,consumption_per_unit:1,is_enabled:true,allow_removal:true,default_price:null}};
         })
         .filter(member => member.component && member.config.is_enabled !== false && member.component.is_active !== false);
       return { link, pack, members };
@@ -2127,16 +2127,21 @@ function getPackageCompositionCharge(group, quantities = {}) {
   if (!group || group.pack?.is_sellable === true) return 0;
   const members = group.members || [];
   const quantityFor = member => Math.max(0, Number(quantities[String(member.row.composition_id)] ?? member.config.default_quantity ?? 0));
+  const priceFor = member => Math.max(0, Number(member.config.default_price ?? (member.component.price || 0)));
   if (group.pack?.franchise_mode === "shared") {
-    const totalQuantity = members.reduce((sum, member) => sum + quantityFor(member), 0);
     const allowance = Math.max(0, Number(group.link?.shared_free_allowance || 0));
-    const unitPrice = Math.max(0, Number(members[0]?.component.price || 0));
-    return Math.max(0, totalQuantity - allowance) * unitPrice;
+    let freeRemaining = allowance, total = 0;
+    members.forEach(member => {
+      const quantity = quantityFor(member), free = Math.min(quantity, freeRemaining);
+      freeRemaining -= free;
+      total += Math.max(0, quantity - free) * priceFor(member);
+    });
+    return total;
   }
   return members.reduce((sum, member) => {
     const quantity = quantityFor(member);
     const allowance = group.pack?.franchise_mode === "per_component" ? Math.max(0, Number(member.config.free_allowance || 0)) : 0;
-    return sum + Math.max(0, quantity - allowance) * Math.max(0, Number(member.component.price || 0));
+    return sum + Math.max(0, quantity - allowance) * priceFor(member);
   }, 0);
 }
 
@@ -2253,15 +2258,28 @@ function openPackageItemModal(item, options, groups) {
       if (fallback && selectedCount !== 1) {
         return { valid: false, message: `Escolha exatamente uma opção em ${packageCustomerName(group.pack)}.` };
       }
-      if (group.pack.min_selections != null && selectedCount < Number(group.pack.min_selections)) {
-        return { valid: false, message: `Escolha pelo menos ${group.pack.min_selections} opção(ões) em ${packageCustomerName(group.pack)}.` };
+      const minimum = Math.max(0, Number(group.link.min_selections ?? group.pack.min_selections ?? 0));
+      if (minimum > 0 && selectedCount < minimum) {
+        return { valid: false, message: `Escolha pelo menos ${minimum} opção(ões) em ${packageCustomerName(group.pack)}.` };
       }
       if (group.pack.max_selections != null && selectedCount > Number(group.pack.max_selections)) {
         return { valid: false, message: `Escolha no máximo ${group.pack.max_selections} opção(ões) em ${packageCustomerName(group.pack)}.` };
       }
     }
     const defaultComposition = groups.reduce((sum, group) => sum + getPackageCompositionCharge(group, getPackageDefaults(group)), 0);
-    const selectedComposition = groups.reduce((sum, group) => sum + getPackageCompositionCharge(group, selected[String(group.pack.id)] || getPackageDefaults(group)), 0);
+    const selectedComposition = groups.reduce((sum, group) => {
+      if (group.pack.is_sellable === true) return sum;
+      const values = selected[String(group.pack.id)] || getPackageDefaults(group);
+      return sum + group.members.reduce((part, member) => {
+        const id = String(member.row.composition_id), standard = Math.max(0, Number(member.config.default_quantity || 0));
+        const quantity = Math.max(0, Number(values[id] || 0));
+        const free = group.pack.franchise_mode === "per_component" ? Math.max(0, Number(member.config.free_allowance || 0)) : 0;
+        const defaultPrice = Math.max(0, Number(member.config.default_price ?? member.component.price) || 0);
+        const officialPrice = Math.max(0, Number(member.component.price) || 0);
+        if (quantity < standard) return part + Math.max(0, quantity - free) * defaultPrice;
+        return part + Math.max(0, standard - free) * defaultPrice + Math.max(0, quantity - standard) * officialPrice;
+      }, 0);
+    }, 0);
     extra = selectedComposition - defaultComposition;
     return { valid: true, extra, optionsText: labels.join(" | "), packageState: selected };
   };
@@ -2271,7 +2289,7 @@ function openPackageItemModal(item, options, groups) {
     : `<div class="modal-head no-photo"><button class="modal-close" id="modalClose" aria-label="Fechar">X</button></div>`;
   const groupsMarkup = groups.map(group => {
     const packageId = String(group.pack.id), fallback = fallbackGroup(group);
-    const minSelections = Math.max(0, Number(group.pack.min_selections || 0));
+    const minSelections = Math.max(0, Number(group.link.min_selections ?? group.pack.min_selections ?? 0));
     const selectedCount = Object.values(packageState[packageId] || {}).filter(value => Number(value) > 0).length;
     const warning = group.pack.availability_rule === "optional_warn_only" && group.members.some(member => !packageMemberAvailable(member))
       ? `<small class="package-stock-warning">Algumas opções estão indisponíveis.</small>` : "";
@@ -2280,13 +2298,14 @@ function openPackageItemModal(item, options, groups) {
       const value = Number(packageState[packageId][compositionId] || 0),
         standard = Number(member.config.default_quantity || 0),
         max = Math.min(packageQuantityLimit(group.pack), Number(member.config.max_quantity ?? member.component.max_quantity ?? 4), Number(member.component.max_quantity ?? 4), member.component.tracks_stock === false ? Number.POSITIVE_INFINITY : Math.floor(Number(member.component.stock || 0) / Math.max(1, Number(member.config.consumption_per_unit || 1))));
-      const price = Number(member.component.price || 0) > 0 ? `<small>${currency(member.component.price)}</small>` : "";
+      const price = "";
       if (fallback) {
         const checked = value === 1;
         return `<label class="package-choice ${available ? "" : "is-unavailable"}"><input type="radio" name="package-${escapeHtml(packageId)}" data-package-action="choose" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${checked ? "checked" : ""} ${available ? "" : "disabled"}><span><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? "<small>Indisponível</small>" : ""}</span></label>`;
       }
       const cannotRemoveLast = value <= 1 && selectedCount <= minSelections;
-      return `<div class="comp-row package-component-choice ${available ? "" : "is-unavailable"}"><div><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? `<small>${group.pack.availability_rule === "optional_warn_only" ? "Indisponível" : "Sem estoque"}</small>` : ""}</div><div class="comp-actions"><div class="qty-wrap"><button type="button" class="qty-btn" data-package-action="step" data-step="-1" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${value <= 0 || cannotRemoveLast ? "disabled" : ""}>−</button><span class="qty-val">${value}</span><button type="button" class="qty-btn" data-package-action="step" data-step="1" data-max="${max}" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${!available ? "disabled" : ""}>+</button></div></div></div>`;
+      const canRemove = group.link.allow_removal !== false && member.config.allow_removal !== false;
+      return `<div class="comp-row package-component-choice ${available ? "" : "is-unavailable"}"><div><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? `<small>${group.pack.availability_rule === "optional_warn_only" ? "Indisponível" : "Sem estoque"}</small>` : ""}</div><div class="comp-actions"><div class="qty-wrap">${canRemove ? `<button type="button" class="qty-btn" data-package-action="step" data-step="-1" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${value <= 0 || cannotRemoveLast ? "disabled" : ""}>−</button>` : ""}<span class="qty-val">${value}</span><button type="button" class="qty-btn" data-package-action="step" data-step="1" data-max="${max}" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${!available ? "disabled" : ""}>+</button></div></div></div>`;
     }).join("");
     return `<section class="package-customer-group"><h4>${escapeHtml(packageCustomerName(group.pack))}${minSelections > 0 ? `<small class="package-minimum">Mínimo ${minSelections}</small>` : ""}</h4>${warning}${rows}</section>`;
   }).join("");
@@ -2312,7 +2331,7 @@ function openPackageItemModal(item, options, groups) {
     const max=Math.max(0,Math.min(Number(button.dataset.max??4),stockLimit));
     const currentValue=Number(packageState[packageId][componentId]||0),nextValue=Math.min(max,Math.max(0,currentValue+Number(button.dataset.step||0)));
     const selectedBefore=Object.values(packageState[packageId]||{}).filter(value=>Number(value)>0).length;
-    const minSelections=Math.max(0,Number(group?.pack.min_selections||0));
+    const minSelections=Math.max(0,Number(group?.link.min_selections??group?.pack.min_selections??0));
     const selectedAfter=selectedBefore-(currentValue>0&&nextValue===0?1:0)+(currentValue===0&&nextValue>0?1:0);
     if(selectedAfter<minSelections){setStatus(`Mantenha pelo menos ${minSelections} opção(ões) em ${packageCustomerName(group.pack)}.`,"err");return}
     packageState[packageId][componentId]=nextValue;
@@ -2323,7 +2342,8 @@ function openPackageItemModal(item, options, groups) {
     for(const decrement of compInteractive.querySelectorAll('[data-package-action="step"][data-step="-1"]')){
       if(decrement.dataset.packageId!==packageId)continue;
       const quantity=Number(packageState[packageId][decrement.dataset.componentId]||0);
-      decrement.disabled=quantity<=0||(quantity<=1&&selectedNow<=minSelections);
+      const member=groups.find(group=>String(group.pack.id)===packageId)?.members.find(entry=>String(entry.row.composition_id)===decrement.dataset.componentId);
+      decrement.disabled=quantity<=0||(quantity<=1&&selectedNow<=minSelections)||member?.config.allow_removal===false||groups.find(group=>String(group.pack.id)===packageId)?.link.allow_removal===false;
     }
     refreshPackagePrice();
   });
