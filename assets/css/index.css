@@ -1162,6 +1162,10 @@ img {
   opacity: .58;
 }
 
+.package-component-choice.is-removal-locked {
+  opacity: .68;
+}
+
 .package-choice {
   display: flex;
   align-items: center;

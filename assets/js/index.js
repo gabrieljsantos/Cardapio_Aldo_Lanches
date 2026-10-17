@@ -2115,7 +2115,7 @@ function getItemPackageGroups(itemId) {
           const profileConfig=link.association_profile_id?state.associationProfileComponents.find(config=>String(config.profile_id)===String(link.association_profile_id)&&String(config.composition_id)===String(row.composition_id)):null;
           return {row,component:state.compMap[row.composition_id],config:link.association_profile_id
             ? {default_quantity:profileConfig?.default_quantity??0,free_allowance:0,max_quantity:state.compMap[row.composition_id]?.max_quantity??4,consumption_per_unit:1,is_enabled:true}
-        : itemConfig || {default_quantity:0,free_allowance:0,max_quantity:4,consumption_per_unit:1,is_enabled:true,allow_removal:true,default_price:null}};
+        : itemConfig || {default_quantity:0,free_allowance:0,max_quantity:4,consumption_per_unit:1,is_enabled:true,allow_removal:true,default_discount:0}};
         })
         .filter(member => member.component && member.config.is_enabled !== false && member.component.is_active !== false);
       return { link, pack, members };
@@ -2127,7 +2127,7 @@ function getPackageCompositionCharge(group, quantities = {}) {
   if (!group || group.pack?.is_sellable === true) return 0;
   const members = group.members || [];
   const quantityFor = member => Math.max(0, Number(quantities[String(member.row.composition_id)] ?? member.config.default_quantity ?? 0));
-  const priceFor = member => Math.max(0, Number(member.config.default_price ?? (member.component.price || 0)));
+  const priceFor = member => Math.max(0, Math.max(0,Number(member.component.price||0)-Number(member.config.default_discount||0)));
   if (group.pack?.franchise_mode === "shared") {
     const allowance = Math.max(0, Number(group.link?.shared_free_allowance || 0));
     let freeRemaining = allowance, total = 0;
@@ -2274,7 +2274,7 @@ function openPackageItemModal(item, options, groups) {
         const id = String(member.row.composition_id), standard = Math.max(0, Number(member.config.default_quantity || 0));
         const quantity = Math.max(0, Number(values[id] || 0));
         const free = group.pack.franchise_mode === "per_component" ? Math.max(0, Number(member.config.free_allowance || 0)) : 0;
-        const defaultPrice = Math.max(0, Number(member.config.default_price ?? member.component.price) || 0);
+        const defaultPrice = Math.max(0, Math.max(0,Number(member.component.price||0)-Number(member.config.default_discount||0)) || 0);
         const officialPrice = Math.max(0, Number(member.component.price) || 0);
         if (quantity < standard) return part + Math.max(0, quantity - free) * defaultPrice;
         return part + Math.max(0, standard - free) * defaultPrice + Math.max(0, quantity - standard) * officialPrice;
@@ -2305,7 +2305,7 @@ function openPackageItemModal(item, options, groups) {
       }
       const cannotRemoveLast = value <= 1 && selectedCount <= minSelections;
       const canRemove = group.link.allow_removal !== false && member.config.allow_removal !== false;
-      return `<div class="comp-row package-component-choice ${available ? "" : "is-unavailable"}"><div><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? `<small>${group.pack.availability_rule === "optional_warn_only" ? "Indisponível" : "Sem estoque"}</small>` : ""}</div><div class="comp-actions"><div class="qty-wrap">${canRemove ? `<button type="button" class="qty-btn" data-package-action="step" data-step="-1" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${value <= 0 || cannotRemoveLast ? "disabled" : ""}>−</button>` : ""}<span class="qty-val">${value}</span><button type="button" class="qty-btn" data-package-action="step" data-step="1" data-max="${max}" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${!available ? "disabled" : ""}>+</button></div></div></div>`;
+      return `<div class="comp-row package-component-choice ${available ? "" : "is-unavailable"} ${canRemove ? "" : "is-removal-locked"}"><div><strong>${escapeHtml(member.component.name)}</strong>${price}${!available ? `<small>${group.pack.availability_rule === "optional_warn_only" ? "Indisponível" : "Sem estoque"}</small>` : ""}</div><div class="comp-actions"><div class="qty-wrap">${canRemove ? `<button type="button" class="qty-btn" data-package-action="step" data-step="-1" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${value <= 0 || cannotRemoveLast ? "disabled" : ""}>−</button>` : ""}<span class="qty-val">${value}</span><button type="button" class="qty-btn" data-package-action="step" data-step="1" data-max="${max}" data-package-id="${escapeHtml(packageId)}" data-component-id="${escapeHtml(compositionId)}" ${!available ? "disabled" : ""}>+</button></div></div></div>`;
     }).join("");
     return `<section class="package-customer-group"><h4>${escapeHtml(packageCustomerName(group.pack))}${minSelections > 0 ? `<small class="package-minimum">Mínimo ${minSelections}</small>` : ""}</h4>${warning}${rows}</section>`;
   }).join("");
@@ -2333,7 +2333,7 @@ function openPackageItemModal(item, options, groups) {
     const selectedBefore=Object.values(packageState[packageId]||{}).filter(value=>Number(value)>0).length;
     const minSelections=Math.max(0,Number(group?.link.min_selections??group?.pack.min_selections??0));
     const selectedAfter=selectedBefore-(currentValue>0&&nextValue===0?1:0)+(currentValue===0&&nextValue>0?1:0);
-    if(selectedAfter<minSelections){setStatus(`Mantenha pelo menos ${minSelections} opção(ões) em ${packageCustomerName(group.pack)}.`,"err");return}
+    if(selectedAfter<minSelections)return;
     packageState[packageId][componentId]=nextValue;
     const value=packageState[packageId][componentId],controls=button.parentElement;
     controls.querySelector(".qty-val").textContent=String(value);
